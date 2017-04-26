@@ -1,0 +1,146 @@
+'use strict';
+
+
+module.exports = {
+	
+	
+	pos     : 'float2', // позиция
+	rgb     : 'float3', // цвет
+	size    : 'float' , // размер
+	value   : 'float' , // how many food
+	cooldown: 'float', // respawn countdown
+	
+	Collider: (use('food-collider'))({
+		'float gridstep': 200,
+		'float cdist'   : 200,
+		
+		'float2 iPosFood        ( int _i             )': `
+			return Food[ _i ].pos;
+		`,
+		'float2 iPosCore        ( int _i             )': `
+			return Core[ _i ].pos;
+		`,
+		'void collideCoreFood ( int foodi, int corei, float dist, float2 dpos )': `
+			Food[ foodi ]{
+				
+				if (.cooldown > 0.01f) {
+					return;
+				}
+				
+				Core[ corei ] {
+					
+					if (dist < .size * 0.5f) {
+						.food +== ..value;
+						
+						..rgb      = {0.3f, 0.3f, 0.3f};
+						..size     = 1.0f;
+						..cooldown = 1.0f;
+					}
+					
+					
+					float2 dir2   = ..pos - .pos;
+					float    len  = length(dir2);
+					dir2         /= len;
+					
+					float fov       = (.fov2 + 1.0f) * 0.5f;
+					
+					float piCoef = 0.5f / 3.1415926f;
+					float dirAngle  = atan2( .dir.y, .dir.x  ) * piCoef;
+					float dir2Angle = atan2(  dir2.y, dir2.x ) * piCoef;
+					
+					float delta     = dirAngle - dir2Angle;
+					
+					if ( delta < -0.5f ) delta += 1;
+					if ( delta >  0.5f ) delta -= 1;
+					
+					float halfFov = fov * 0.5f;
+					
+					// .forward.value = 1.0f;
+					if ( delta > -halfFov && delta < halfFov ){
+						float project   = ( delta + halfFov ) / fov;
+						
+						int eyeIdx = project * .eyes2.length;
+						.eyes2[ eyeIdx ] {
+							.neuron.value +== max(0.1f, cdist - dist / cdist);
+						}
+					}
+				}
+			}
+		`,
+	}),
+	
+	
+	'void ctor(float2 pos)': `
+		.pos      = pos;
+		.rgb      = {0.3f, 1.0f, 0.3f};
+		.size     = 4.0f;
+		.value    = 0.2f;
+		.cooldown = 0.0f;
+	`,
+	
+	
+	add(count, pos, scale) {
+		pos = pos || [0, 0];
+		scale = scale || 1;
+		
+		this(count, { 'float2 offs': pos, 'float scale': scale }, `
+			Self.new { .ctor(scale * ri2xy(1, i) + offs); }
+		`);
+		
+	},
+	
+	
+	go() {
+		// console.log('NEURON', this.App.get());
+		const app = this.App.get();
+		this.points = new app.tuti.Points({
+			data: this,
+			frag: `
+				varying vec3  varColor;
+				varying vec2  varTcoord;
+				varying float varSize;
+				
+				void main() {
+					
+					vec2 pos = 2.0 * abs(gl_PointCoord.xy - vec2(0.5, 0.5));
+					pos.y = (1 - 1.1 * pos.y);
+					
+					float ul = pow(1-pos.x, 0.25);
+					float ll = pow(1-pos.x, 4);
+					float ld = max(max(0, pos.y - ul), max(0, ll - pos.y));
+					
+					gl_FragColor = vec4(varColor, 1-8*ld);
+					
+				}
+			`,
+		});
+	},
+	
+	
+	tick() {
+		
+		this(`
+			if (.cooldown > 0.01f) {
+				.cooldown *= 0.99f;
+			} else if (.cooldown > 0.0f) {
+				.cooldown = 0.0f;
+				.rgb      = {0.3f, 1.0f, 0.3f};
+				.size     = 4.0f;
+			}
+			
+			for (int j = 0; j < .%10; j++) {
+				Random.get();
+			}
+			
+			.pos += {0.2f - Random.get() * 0.4f, 0.2f - Random.get() * 0.4f};
+			.pos = Lib.rotate2( .pos, 0.25 / (length(.pos) + 1.0f) );
+			
+		`);
+		
+		this.Food.Collider.buildGrid();
+		this.Food.Collider.collide( this.Core.el.count );
+		
+	}
+	
+	
+};
