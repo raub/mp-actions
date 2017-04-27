@@ -1,108 +1,48 @@
 'use strict';
 
-
-const use = require('use');
-const RauApp = use('lib/rau/app');
-const net = use('lib/rau/net');
-const base64 = use('lib/rau/base64');
+const vars = require('../.');
 
 
-class App extends RauApp {
+const protocol = new vars.Protocol({
+	version: '0.1',
+	dict: [
+		{ name: 'hi' , channel: 'tcp' },
+		{ name: 'lol', channel: 'udp' },
+	],
+});
+
+const createServer = (cb) => {
 	
+	const sv = new vars.Server(protocol);
 	
-	get gui() { return this._gui; }
+	sv.open({port: 27999}, cb);
 	
+};
+
+const joinServer = () => {
 	
-	constructor() {
-		
-		super({});
-		
-		// GPU codes are from 'gpu' folder and processed with Scope. App injected
-		const gpu = use('gpu/index');
-		const app = this;
-		gpu.App = {get() { return app; }};
-		this.gpu = this.scope(gpu);
-		this.gpu.go();
-		
-		this._gui = new this.Gui({ screen: this.screen });
-		
-		const OrbitControls = use('three-orbit-controls')(this.three);
-		const controls = new OrbitControls(this.screen.camera, this.canvas);
-		controls.zoomSpeed = 2.0;
-		
-		this.protocol = new net.Protocol({
-			version: '0.1',
-			dict: {
-				hi: 'tcp',
-				lol: 'udp',
-			},
-		});
-		
-		this.createServer(() => {
-			this.joinServer();
-		});
-		
-	}
+	const cl = new vars.Client(protocol);
 	
-	
-	createServer(cb) {
+	cl.listServers(() => {
 		
-		var sv = new net.Server(this.protocol);
-		
-		sv.open({port: 27999}, cb);
-		
-	}
-	
-	
-	joinServer() {
-		
-		var cl = new net.Client(this.protocol);
-		
-		cl.listServers(() => {
-			console.log('CB!');
-			if (cl.serverList.length === 1) {
-				console.log('JOIN', cl.serverList[0]);
-				cl.open(cl.serverList[0], () => {
+		if (cl.serverList.length === 1) {
+			
+			cl.open(cl.serverList[0], () => {
+				
+				setInterval(() => {
 					
+					cl.send('hi', {
+						x: 1
+					});
 					
-					
-					setInterval(() => {
-						
-						this.gpu.Core.el.arrs.pos.d2h();
-						this.gpu.Food.el.arrs.pos.d2h();
-						
-						cl.send('hi', {
-							core  : base64.write.f32(
-								this.gpu.Core.el.arrs.pos.host,
-								this.gpu.Core.el.count
-							),
-							food  : base64.write.f32(
-								this.gpu.Food.el.arrs.pos.host,
-								this.gpu.Food.el.count
-							),
-							coreNum: this.gpu.Core.el.count,
-							foodNum: this.gpu.Food.el.count,
-						});
-						
-					}, 2000);
-						
-				});
-			}
-		});
-		
-	}
-	
-	
-	draw() {
-		
-		this.gpu.tick();
-		
-		this._gui.draw();
-		super.draw();
-		
-	}
+				}, 2000);
+				
+			});
+		}
+	});
 	
 }
 
-new App();
-
+createServer(() => {
+	joinServer();
+});
