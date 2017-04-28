@@ -51,24 +51,6 @@ class Address {
 		return this._host + ':' + this._port;
 	}
 	
-	/**
-	 * Stringified address
-	 * @return {String} stringified address
-	 */
-	get inline() { return this.toString(); }
-	
-	/**
-	 * Stringified address
-	 * @return {String} stringified address
-	 */
-	get asString() { return this.toString(); }
-	
-	/**
-	 * Stringified address
-	 * @return {String} stringified address
-	 */
-	get stringified() { return this.toString(); }
-	
 }
 
 module.exports = Address;
