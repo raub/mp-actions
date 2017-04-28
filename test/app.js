@@ -3,13 +3,54 @@
 const vars = require('../.');
 
 
-const protocol = new vars.Protocol({
-	version: '0.1',
-	dict: [
-		{ name: 'hi' , channel: 'tcp' },
-		{ name: 'lol', channel: 'udp' },
-	],
-});
+class Test {
+	
+	construcror() {
+		
+		this.state = {
+			x    : 0, // client controlled value
+			y    : 0, // host calculated and predicted value
+			moves: {
+				left : false,
+				right: false,
+			},
+		};
+		
+		this.actions = {
+			MOVE_LEFT:  { channel: 'udp', client: true  },
+			MOVE_RIGHT: { channel: 'udp', client: true  },
+			SET_X:      { channel: 'udp', client: false },
+			SET_Y:      { channel: 'udp', client: false },
+		};
+		
+	}
+	
+	simulate(dt) {
+		
+		const vx = dt * ( (this.state.moves.right?1:0) - (this.state.moves.left?1:0) );
+		this.dispatch('SET_X', this.state.x + vx);
+		this.dispatch('SET_Y', Math.sin(this.state.x));
+		
+	}
+	
+	dispatch(name, data) {
+		
+	}
+	
+	encode(action) {
+		
+	}
+	
+	decode() {
+		
+	}
+	
+}
+
+
+
+
+
 
 const createServer = (cb) => {
 	
@@ -19,11 +60,11 @@ const createServer = (cb) => {
 	
 };
 
-const joinServer = () => {
+const joinServer = (cb) => {
 	
 	const cl = new vars.Client(protocol);
 	
-	cl.listServers(() => {
+	cl.localServers(() => {
 		
 		if (cl.serverList.length === 1) {
 			
