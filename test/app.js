@@ -1,82 +1,41 @@
 'use strict';
 
-const vars = require('../.');
-
-
-class Test {
-	
-	construcror() {
-		
-		this.state = {
-			x    : 0, // client controlled value
-			y    : 0, // host calculated and predicted value
-			moves: {
-				left : false,
-				right: false,
-			},
-		};
-		
-		this.actions = {
-			MOVE_LEFT:  { channel: 'udp', client: true  },
-			MOVE_RIGHT: { channel: 'udp', client: true  },
-			SET_X:      { channel: 'udp', client: false },
-			SET_Y:      { channel: 'udp', client: false },
-		};
-		
-	}
-	
-	simulate(dt) {
-		
-		const vx = dt * ( (this.state.moves.right?1:0) - (this.state.moves.left?1:0) );
-		this.dispatch('SET_X', this.state.x + vx);
-		this.dispatch('SET_Y', Math.sin(this.state.x));
-		
-	}
-	
-	dispatch(name, data) {
-		
-	}
-	
-	encode(action) {
-		
-	}
-	
-	decode() {
-		
-	}
-	
-}
-
-
-
-
+const mpact = require('../.');
+const protocol = require('./protocol');
+const Game = require('./game');
 
 
 const createServer = (cb) => {
 	
-	const sv = new vars.Server(protocol);
+	const server = new mpact.Server(protocol);
 	
-	sv.open({port: 27999}, cb);
+	server.open({port: 27999}, () => {
+		
+		const svTest = new Game(server);
+		server.on('action', svTest.dispatch.bind(svTest));
+		svTest.on('action', server.dispatch.bind(server));
+		
+		cb();
+		
+	});
 	
 };
 
 const joinServer = (cb) => {
 	
-	const cl = new vars.Client(protocol);
+	const client = new mpact.Client(protocol);
 	
-	cl.localServers(() => {
+	client.localServers(() => {
 		
-		if (cl.serverList.length === 1) {
+		if (client.serverList.length === 1) {
 			
-			cl.open(cl.serverList[0], () => {
+			client.open(client.serverList[0], () => {
 				
-				setInterval(() => {
-					
-					cl.send('hi', {
-						x: 1
-					});
-					
-				}, 2000);
+				const clTest = new Game(client);
+				client.on('action', clTest.dispatch.bind(clTest));
+				clTest.on('action', client.dispatch.bind(client));
+				
+				cb();
 				
 			});
 		}
@@ -85,5 +44,6 @@ const joinServer = (cb) => {
 }
 
 createServer(() => {
-	joinServer();
+	console.log('SERVER ONLINE.');
+	joinServer(() => console.log('CLIENT ONLINE.'));
 });
