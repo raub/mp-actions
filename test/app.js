@@ -11,6 +11,8 @@ const createServer = (cb) => {
 	
 	server.open({port: 27999}, () => {
 		
+		console.log('SERVER ONLINE.');
+		
 		const svTest = new Game(server);
 		server.on('action', svTest.dispatch.bind(svTest));
 		svTest.on('action', server.dispatch.bind(server));
@@ -25,19 +27,32 @@ const joinServer = (cb) => {
 	
 	const client = new mpact.Client(protocol);
 	
-	client.localServers(() => {
+	client.localServers(list => {
 		
-		if (client.serverList.length === 1) {
+		if (list.length === 1) {
 			
-			client.open(client.serverList[0], () => {
+			client.open(list[0], () => {
 				
 				const clTest = new Game(client);
 				client.on('action', clTest.dispatch.bind(clTest));
 				clTest.on('action', client.dispatch.bind(client));
 				
-				cb();
+				console.log('CLIENT#1 ONLINE.');
+				
+				const client2 = new mpact.Client(protocol);
+				client2.open(list[0], () => {
+					
+					console.log('CLIENT#2 ONLINE.');
+					const clTest = new Game(client2);
+					client2.on('action', clTest.dispatch.bind(clTest));
+					clTest.on('action', client2.dispatch.bind(client2));
+					
+					cb();
+					
+				});
 				
 			});
+			
 		}
 	});
 	

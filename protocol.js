@@ -1,7 +1,10 @@
 'use strict';
 
+const crypto = require('crypto');
+
+
 /**
- * Network identity
+ * Network identity carrier
  * @author Luis Blanco
  * @memberof RauNet
  */
@@ -18,20 +21,14 @@ class Protocol {
 	 */
 	constructor(opts) {
 		
-		this._version = '' + (opts.version || opts.v || 'none');
-		this._dict = {};
+		this._version = '' + (opts.version || 'none');
+		this._actions = opts.actions;
 		
-		this._tcp = [];
-		this._udp = [];
 		
-		Object.keys(opts.dict).forEach((key) => {
-			
-			this._dict[key] = opts.dict[key] === 'udp' ? 'udp' : 'tcp';
-			this['_' + this._dict[key]].push(key);
-			
-		});
 		
-		this._identity = this._version + JSON.stringify(this._dict);
+		const hash = crypto.createHash('sha256');
+		hash.update(this._version + JSON.stringify(this._actions));
+		this._identity = hash.digest('hex');
 		
 	}
 	
@@ -40,8 +37,8 @@ class Protocol {
 	 * Decides a channel for the given message id
 	 * @return {String} id Message name
 	 */
-	getChannel(id) {
-		return this._dict[id] || 'tcp';
+	getChannel(action) {
+		return this._actions[action].reliable && 'tcp' || 'udp';
 	}
 	
 	/**
