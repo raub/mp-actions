@@ -7,60 +7,113 @@ const Control = require('./control');
 
 class Game extends EventEmitter {
 	
-	construcror(net) {
-		
-		this.net = net;
-		
-		this.ctl = new Control();
+	
+	// Prepare game data, might be server or client
+	construcror(opts) {
 		
 		this.state = {
-			x  : 0, // client controlled predictable value
-			y  : 0, // calculated predictable value
-			ctl: this.ctl.toArray(),
+			id     : opts.id, // undefined for server
+			avx    : 0,
+			avy    : 0,
+			players: {}, // for random access
+			plist  : [], // for iteration
 		};
 		
+		// Updates local-player-local-data, controls usually. But no player yet
+		this._updatePlayer = ()=>{};
 		
+		// Game simulation with timing
 		this.prevTime = Date.now();
-		this.timer = setInterval(()=>{
+		this.timer = setInterval(() => {
 			
+			// Use delta time to do physics
 			const nextTime = Date.now();
 			const dt = nextTime - this.prevTime;
 			this.prevTime = nextTime;
 			
+			// Actually simulate game
 			this.simulate(dt);
 			
-			this.ctl.fetch();
-			this.apply({ type: 'SET_CTL', data: this.ctl.toArray() });
-			
 		}, 16);
+		
+		
 		
 	}
 	
 	
+	// Game simulation routine, advances game logic by given delta-time
 	simulate(dt) {
-		const vx = dt * ( (this.state.moves.right?1:0) - (this.state.moves.left?1:0) );
-		this.apply({ type: 'SET_X', data: this.state.x + vx });
+		
+		// First update local player state
+		this._updatePlayer();
+		
+		// Then update (predict) everybody
+		this.state.playerlist.forEach(player => {
+			const vx = dt * ( (player.control.right?1:0) - (player.control.left?1:0) );
+			this.apply({ type: 'SET_X', data: { x: player.x + vx, id: player.id } });
+		});
+		
 	}
 	
 	
+	// Private version of dispatch with event emission
 	apply(action) {
 		this.dispatch(action);
 		this.emit('action', action);
 	}
 	
+	addPlayer(id) {
+		this.dispatch({ type: 'ADD_CL', data: id });
+	}
 	
+	removePlayer(id) {
+		this.dispatch({ type: 'REM_CL', data: id });
+	}
+	
+	// Action processor
 	dispatch(action) {
 		
 		switch(action.type) {
 			
+			case 'ADD_CL':
+				// TODO: make a class maybe? or even two...
+				const player = {
+					id: action.data,
+					x : 0,
+					y : 0,
+					settings: {},
+					control : new Control(),
+				};
+				this.state.players[action.data] = player;
+				this.state.playerlist.push(player);
+				
+				if (this.state.id === action.data) {
+					this._updatePlayer = function () {
+						player.control.fetch();
+						if (player.control.quit) {
+							this.emit('quit');
+						}
+						this.apply({ type: 'SET_CTL', data: player.control.toArray() });
+					};
+				}
+				
+				break;
+				
+			case 'REM_CL':
+				delete this.state.players[action.data];
+				this.state.playerlist = this.state.playerlist.filter(p => p.id !== action.data);
+				if (this.state.id === action.data) {
+					this._updatePlayer = ()=>{};
+				}
+				break;
+				
 			case 'SET_CTL':
-				this.state.ctl = action.data;
-				this.control.fromArray(this.state.ctl);
+				this.state.players[action.clid].control.fromArray(action.data);
 				break;
 				
 			case 'SET_X':
-				this.state.x = action.data;
-				this.state.y = Math.sin(this.state.x);
+				this.state.players[action.data.id].x = action.data.x;
+				this.state.players[action.data.id].y = Math.sin(action.data.x);
 				break;
 				
 			default: break;
