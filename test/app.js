@@ -5,6 +5,14 @@ const protocol = require('./protocol');
 const Game = require('./game');
 
 
+const subscribe = (mpact, game) => {
+	mpact.on( 'action', game.dispatch.bind(game)   );
+	game.on(  'action', mpact.dispatch.bind(mpact) );
+	game.on(  'quit'  , mpact.quit.bind(mpact)     );
+	mpact.on( 'join'  , game.join.bind(game)       );
+	mpact.on( 'drop'  , game.drop.bind(game)       );
+};
+
 const createServer = (cb) => {
 	
 	const server = new mpact.Server(protocol);
@@ -13,9 +21,8 @@ const createServer = (cb) => {
 		
 		console.log('SERVER ONLINE.');
 		
-		const svTest = new Game(server);
-		server.on('action', svTest.dispatch.bind(svTest));
-		svTest.on('action', server.dispatch.bind(server));
+		const game = new Game();
+		subscribe(server, game);
 		
 		cb();
 		
@@ -23,6 +30,7 @@ const createServer = (cb) => {
 	
 };
 
+let numClients = 0;
 const joinServer = (cb) => {
 	
 	const client = new mpact.Client(protocol);
@@ -33,23 +41,12 @@ const joinServer = (cb) => {
 			
 			client.open(list[0], () => {
 				
-				const clTest = new Game(client);
-				client.on('action', clTest.dispatch.bind(clTest));
-				clTest.on('action', client.dispatch.bind(client));
+				console.log(`CLIENT#${++numClients} ONLINE.`);
 				
-				console.log('CLIENT#1 ONLINE.');
+				const game = new Game(client.id);
+				subscribe(client, game);
 				
-				const client2 = new mpact.Client(protocol);
-				client2.open(list[0], () => {
-					
-					console.log('CLIENT#2 ONLINE.');
-					const clTest = new Game(client2);
-					client2.on('action', clTest.dispatch.bind(clTest));
-					clTest.on('action', client2.dispatch.bind(client2));
-					
-					cb();
-					
-				});
+				cb();
 				
 			});
 			
@@ -58,7 +55,18 @@ const joinServer = (cb) => {
 	
 }
 
-createServer(() => {
-	console.log('SERVER ONLINE.');
-	joinServer(() => console.log('CLIENT ONLINE.'));
-});
+async.series(
+	
+	[
+		cb => createServer(cb),
+		cb => joinServer(cb),
+		cb => joinServer(cb),
+		cb => joinServer(cb),
+	],
+	
+	err => {
+		console.log('DONE.');
+	}
+	
+);
+

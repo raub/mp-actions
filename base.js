@@ -27,6 +27,9 @@ class Base extends EventEmitter {
 		this._isOpen   = false;
 		this._protocol = protocol;
 		
+		
+		
+		
 	}
 	
 	
@@ -55,27 +58,37 @@ class Base extends EventEmitter {
 	 * @arg {data} data compressed network message
 	 * @arg {function} cb
 	 */
-	decode(data, cb) {
-		zlib.unzip(data, (err, buffer) => cb(err, err ? null : JSON.parse(buffer)));
+	decode(binary) {
+		
+		const str = binary.readString();
+		
+		let data;
+		try {
+			data = (JSON.parse(str))[0];
+		} catch (err) {
+			return null;
+		}
+		
+		return data;
+		
 	}
 	
 	
 	/**
-	 * Encodes network message
+	 * Encodes network message, the default way
 	 * @arg {Object} msg Object to be compressed
 	 * @arg {function} cb
 	 */
-	encode(msg, cb) {
-		const data = JSON.stringify(msg);
+	encode(binary, data) {
 		
-		zlib.deflate(data, (err, buffer) => {
-			if ( ! err ) {
-				cb(null, buffer);
-			} else {
-				// handle error
-				cb(err);
-			}
-		});
+		let str;
+		try {
+			str = JSON.stringify([data]);
+		} catch (err) {
+			return binary.writeString('[null]');
+		}
+		binary.writeString(str);
+		
 	}
 	
 	

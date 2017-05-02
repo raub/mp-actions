@@ -14,8 +14,8 @@ module.exports = new mpact.Protocol({
 			reliable: false,
 			client  : true,
 			
-			encoder(binary, data) { binary.pushBits(data); },
-			decoder(binary) { return binary.pullBits(); },
+			encode(binary, data) { binary.pushBits(data); },
+			decode(binary) { return binary.pullBits(); },
 			
 		},
 		
@@ -25,8 +25,15 @@ module.exports = new mpact.Protocol({
 			reliable: false,
 			client  : false,
 			
-			encoder(binary, data) { binary.writeFloat(data); },
-			decoder(binary) { return binary.readFloat(); },
+			encode(binary, data) {
+				binary.writeUint8(data.id);
+				binary.writeFloat(data.x);
+			},
+			decode(binary) {
+				const id = binary.readUint8();
+				const x = binary.readFloat();
+				return { id, x };
+			},
 			
 		},
 		
