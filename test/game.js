@@ -50,7 +50,7 @@ class Game extends EventEmitter {
 		// Then update (predict) everybody
 		this.state.playerlist.forEach(player => {
 			const vx = dt * ( (player.control.right?1:0) - (player.control.left?1:0) );
-			this.apply({ type: 'SET_X', data: { x: player.x + vx, id: player.id } });
+			this.apply({ type: 'SV_X', data: { x: player.x + vx, id: player.id } });
 		});
 		
 	}
@@ -93,7 +93,7 @@ class Game extends EventEmitter {
 						if (player.control.quit) {
 							this.emit('quit');
 						}
-						this.apply({ type: 'SET_CTL', data: player.control.toArray() });
+						this.apply({ type: 'CL_CONTROL', data: player.control.toArray() });
 					};
 				}
 				
@@ -107,13 +107,42 @@ class Game extends EventEmitter {
 				}
 				break;
 				
-			case 'SET_CTL':
-				this.state.players[action.clid].control.fromArray(action.data);
+			// Controls data FROM client - resent by server
+			case 'CL_CONTROL':
+				
+				if (action.clid) {
+					// Serverside: transmit to all other clients
+					this.apply({ type: 'SV_CONTROL', data: { id: action.clid, control: action.data } });
+				} else {
+					// Clientside: apply immediately
+					this.state.players[this.state.id].control.fromArray(action.data);
+				}
+				
 				break;
 				
-			case 'SET_X':
+			// Controls data FROM server - apply state change
+			case 'SV_CONTROL':
+				// Do not apply to self
+				if (this.state.id === action.data.id) {
+					break;
+				}
+				this.state.players[action.data.id].control.fromArray(action.data.control);
+				break;
+				
+			case 'SV_X':
 				this.state.players[action.data.id].x = action.data.x;
 				this.state.players[action.data.id].y = Math.sin(action.data.x);
+				break;
+				
+			// Chat message FROM client - resent by server
+			case 'CL_CHAT':
+				if (action.clid) {
+					this.apply({ type: 'SV_CHAT', data: { id: action.clid, control: action.data } });
+				}
+				break;
+				
+			case 'SV_CHAT':
+				console.log('CHAT:', action.data.id, action.data.text);
 				break;
 				
 			default: break;
