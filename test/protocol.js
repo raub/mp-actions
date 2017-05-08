@@ -36,8 +36,15 @@ module.exports = new mpact.Protocol({
 		
 		SV_X: {
 			
-			encode(binary, data) { binary.pushFloat(data); },
-			decode(binary) { return binary.pullFloat(); },
+			encode(binary, data) {
+				binary.writeUint8(data.id);
+				binary.writeFloat(data.x);
+			},
+			decode(binary) {
+				const id = binary.readUint8();
+				const x = binary.readFloat();
+				return { id, x };
+			},
 			
 		},
 		

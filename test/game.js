@@ -62,12 +62,16 @@ class Game extends EventEmitter {
 		this.emit('action', action);
 	}
 	
-	addPlayer(id) {
-		this.dispatch({ type: 'ADD_CL', data: id });
+	
+	// For join event
+	join(id) {
+		this.dispatch({ type: 'ADD_PLAYER', data: id });
 	}
 	
-	removePlayer(id) {
-		this.dispatch({ type: 'REM_CL', data: id });
+	
+	// For drop event
+	drop(id) {
+		this.dispatch({ type: 'REM_PLAYER', data: id });
 	}
 	
 	// Action processor
@@ -75,7 +79,7 @@ class Game extends EventEmitter {
 		
 		switch(action.type) {
 			
-			case 'ADD_CL':
+			case 'ADD_PLAYER':
 				// TODO: make a class maybe? or even two...
 				const player = {
 					id: action.data,
@@ -99,7 +103,7 @@ class Game extends EventEmitter {
 				
 				break;
 				
-			case 'REM_CL':
+			case 'REM_PLAYER':
 				delete this.state.players[action.data];
 				this.state.playerlist = this.state.playerlist.filter(p => p.id !== action.data);
 				if (this.state.id === action.data) {

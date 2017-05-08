@@ -19,49 +19,44 @@ class Server extends Base {
 		
 		super(protocol);
 		
-		this._clients = [];
-		this._clientsObj = {};
-		this._frame = [];
+		this._clist   = [];
+		this._clients = {};
+		
+		this._frameTcp = [];
+		this._frameUdp = [];
+		
 	}
 	
-	handshake(socket, data) {
+	handshake(socket, msg) {
 		console.log('SV GOT HANDSHAKE:', socket.name, data.toString());
 		
-		// Send a nice welcome message and announce
-		this.decode(data, (err, msg) => {
-			if (err) {
-				return console.error(err);
-			}
+		// Correct handshake
+		if (msg.identity === this.protocol.identity) {
+			console.log('SV CLIENT ACCEPTED!');
 			
-			// Correct handshake
-			if (msg.identity === this.protocol.identity) {
-				console.log('SV CLIENT ACCEPTED!');
+			// Put this new client in the list
+			this._clients.push(socket);
+			this._clientsObj[socket.name] = socket;
+			
+			socket.on('data', (data) => {
 				
-				// Put this new client in the list
-				this._clients.push(socket);
-				this._clientsObj[socket.name] = socket;
-				
-				socket.on('data', (data) => {
+				this.decode(data, (err, msg) => {
+					if (err) {
+						return console.error(err);
+					}
 					
-					this.decode(data, (err, msg) => {
-						if (err) {
-							return console.error(err);
-						}
-						
-						this.process(socket, msg);
-					});
-						
+					this.process(socket, msg);
 				});
-				
-				// Remove the client from the list when it leaves
-				socket.on('end', () => {
-					console.log('SV CLIENT LEFT:', socket.name);
-					this._clients.splice(this._clients.indexOf(socket), 1);
-					delete this._clientsObj[socket.name];
-				});
-			}
-		});
-		
+					
+			});
+			
+			// Remove the client from the list when it leaves
+			socket.on('end', () => {
+				console.log('SV CLIENT LEFT:', socket.name);
+				this._clients.splice(this._clients.indexOf(socket), 1);
+				delete this._clientsObj[socket.name];
+			});
+		}
 		
 	}
 	
@@ -74,9 +69,9 @@ class Server extends Base {
 		
 		this._address = opts.address || new Address('0.0.0.0', opts.port);
 		
-		this.serverTcp = net.createServer((socket) => {
+		this.serverTcp = net.createServer(socket => {
 			
-			// Identify this client
+			// Identify a new client
 			socket.name = socket.remoteAddress + ":" + socket.remotePort;
 			console.log('SV GOT CLIENT:', socket.name);
 			

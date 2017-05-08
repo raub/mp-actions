@@ -6,6 +6,7 @@ class Control {
 	constructor() {
 		this.left  = false;
 		this.right = false;
+		this.quit  = false;
 	}
 	
 	fetch() {
