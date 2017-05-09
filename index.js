@@ -1,14 +1,8 @@
 'use strict';
 
-/**
- * @namespace RauNet
- * @desc Network interaction within TCP and UDP channels
- * @author Luis Blanco
- */
 module.exports = {
-	Base    : require('./base'    ),
-	Client  : require('./client'  ),
-	Server  : require('./server'  ),
-	Address : require('./address' ),
-	Protocol: require('./protocol'),
+	Client  : require('./src/mpact-client'  ),
+	Server  : require('./src/mpact-server'  ),
+	Address : require('./src/utils/address' ),
+	Protocol: require('./src/utils/protocol'),
 };

@@ -1,0 +1,26 @@
+{
+  "name": "mpact",
+  "version": "0.0.1",
+  "description": "Multiplayer framework for Node.js",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/raub/mpact"
+  },
+  "keywords": [
+    "mpact",
+    "node",
+    "nodejs",
+    "framework",
+    "client",
+    "server",
+    "multiplayer"
+  ],
+  "dependencies": {
+    "async": "2.1.5"
+  },
+  "license": "MIT"
+}

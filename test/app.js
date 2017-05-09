@@ -1,5 +1,7 @@
 'use strict';
 
+const async = require('async');
+
 const mpact = require('../.');
 const protocol = require('./protocol');
 const Game = require('./game');
@@ -8,7 +10,7 @@ const Game = require('./game');
 const subscribe = (mpact, game) => {
 	mpact.on( 'action', game.dispatch.bind(game)   );
 	game.on(  'action', mpact.dispatch.bind(mpact) );
-	game.on(  'quit'  , mpact.quit.bind(mpact)     );
+	game.on(  'quit'  , mpact.close.bind(mpact)    );
 	mpact.on( 'join'  , game.join.bind(game)       );
 	mpact.on( 'drop'  , game.drop.bind(game)       );
 };
@@ -65,7 +67,7 @@ async.series(
 	],
 	
 	err => {
-		console.log('DONE.');
+		console.log('DONE.', err);
 	}
 	
 );

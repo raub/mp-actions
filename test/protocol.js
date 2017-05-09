@@ -11,7 +11,8 @@ module.exports = new mpact.Protocol({
 		
 		CL_CONTROL: {
 			
-			client  : true,
+			client: true,
+			reset : true,
 			
 			encode(binary, data) { binary.pushBits(data); },
 			decode(binary) { return binary.pullBits(); },

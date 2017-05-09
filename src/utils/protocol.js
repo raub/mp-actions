@@ -9,6 +9,7 @@ const crypto = require('crypto');
  */
 class Protocol {
 	
+	
 	/**
 	 * @constructs Protocol
 	 * @desc Constructs Protocol with given options
@@ -28,6 +29,7 @@ class Protocol {
 				type,
 				reliable: opts.actions[type].reliable && true || false,
 				client  : opts.actions[type].client   && true || false,
+				reset   : opts.actions[type].reset    && true || false,
 			};
 		});
 		
@@ -35,13 +37,23 @@ class Protocol {
 		hash.update(this._version + JSON.stringify(this._actions));
 		this._identity = hash.digest('hex');
 		
-		this.isClient = {};
+		this.isClient   = {};
 		this.isReliable = {};
-		this._index = {};
+		this.isReset    = {};
+		
+		this._index    = {};
+		this._encoders = {};
+		this._decoders = {};
+		
 		this._actions.forEach(action => {
 			this.isReliable[action.type] = action.reliable;
-			this.isClient[action.type] = action.client;
-			this._index[action.type] = action.index;
+			this.isClient[action.type]   = action.client;
+			this.isReset[action.type]    = action.reset;
+			this._index[action.type]     = action.index;
+			
+			this._encoders[action.type] = opts.actions[action.type].encode || this.encodeDefault;
+			this._decoders[action.type] = opts.actions[action.type].decode || this.decodeDefault;
+			
 		});
 		
 		if (this._actions.length >> 8 === 0) {
@@ -54,12 +66,45 @@ class Protocol {
 			this._pushIndex = 'pushUint32';
 			this._pullIndex = 'pullUint32';
 		}
-		this.encodeIndex = function (binary, index) {
-			binary[this._pushIndex](index);
-		};
-		this.decodeIndex = function (binary) {
-			return binary[this._pullIndex]();
-		};
+		
+	}
+	
+	
+	/**
+	 * Decodes network message
+	 * @arg {data} data compressed network message
+	 * @arg {function} cb
+	 */
+	decodeDefault(binary) {
+		
+		const str = binary.readString();
+		
+		let data;
+		try {
+			data = (JSON.parse(str))[0];
+		} catch (err) {
+			return null;
+		}
+		
+		return data;
+		
+	}
+	
+	
+	/**
+	 * Encodes network message, the default way
+	 * @arg {Object} msg Object to be compressed
+	 * @arg {function} cb
+	 */
+	encodeDefault(binary, data) {
+		
+		let str;
+		try {
+			str = JSON.stringify([data]);
+		} catch (err) {
+			return binary.writeString('[null]');
+		}
+		binary.writeString(str);
 		
 	}
 	
@@ -76,6 +121,24 @@ class Protocol {
 	 * @return {String} identity
 	 */
 	get identity() { return this._identity; }
+	
+	
+	encode(binary, action) {
+		
+		binary[this._pushIndex](this._index[action.type]);
+		this._encoders[action.type](binary, action.data);
+		
+	}
+	
+	
+	decode(binary) {
+		
+		const index = binary[this._pullIndex]();
+		const type = this._actionKeys[index];
+		const data = this._decoders[type](binary);
+		return { type, data };
+		
+	}
 	
 	
 }

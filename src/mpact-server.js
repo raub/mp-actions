@@ -1,97 +1,83 @@
 'use strict';
 
-
 const dgram = require('dgram');
 const Address = require('./address');
-const Base = require('./base');
+const DuoSocket = require('./duo-socket');
+const MpAct = require('./mpact');
 const net = require('net');
 
 
 /**
  * Network server
  * @author Luis Blanco
- * @extends Base
- * @memberof RauNet
+ * @extends MpAct
  */
-class Server extends Base {
+class Server extends MpAct {
+	
 	
 	constructor(protocol) {
 		
 		super(protocol);
 		
-		this._clist   = [];
-		this._clients = {};
-		
-		this._frameTcp = [];
-		this._frameUdp = [];
-		
 	}
 	
-	handshake(socket, msg) {
-		console.log('SV GOT HANDSHAKE:', socket.name, data.toString());
+	
+	dispatch(action) {
 		
-		// Correct handshake
-		if (msg.identity === this.protocol.identity) {
-			console.log('SV CLIENT ACCEPTED!');
-			
-			// Put this new client in the list
-			this._clients.push(socket);
-			this._clientsObj[socket.name] = socket;
-			
-			socket.on('data', (data) => {
-				
-				this.decode(data, (err, msg) => {
-					if (err) {
-						return console.error(err);
-					}
-					
-					this.process(socket, msg);
-				});
-					
-			});
-			
-			// Remove the client from the list when it leaves
-			socket.on('end', () => {
-				console.log('SV CLIENT LEFT:', socket.name);
-				this._clients.splice(this._clients.indexOf(socket), 1);
-				delete this._clientsObj[socket.name];
-			});
+		if ( ! this._protocol.isClient[action.type]) {
+			super.dispatch(action);
 		}
 		
 	}
 	
 	
-	process(socket, packet) {
-		console.log('SV PROCESS MSG:', socket.name);
+	handshake(socket, binary) {
+		console.log('SV GOT HANDSHAKE:', socket.name);
+		
+		const identity = binary.pullString();
+		
+		// Correct handshake
+		if (identity === this._protocol.identity) {
+			console.log('SV CLIENT ACCEPTED!');
+			
+			this.pushSocket(socket);
+			
+		} else {
+			socket.destroy();
+		}
+		
 	}
+	
+	
+	emitActions(binary) {
+		this._readPacket(binary).forEach(action => {
+			if ( this._protocol.isClient[action.type] ) {
+				this.emit('action', action);
+			}
+		});
+	}
+	
 	
 	open(opts, cb) {
 		
 		this._address = opts.address || new Address('0.0.0.0', opts.port);
+		this.serverUdp = dgram.createSocket({type:'udp4', reuseAddr: true});
 		
-		this.serverTcp = net.createServer(socket => {
+		this.serverTcp = net.createServer(tcp => {
 			
-			// Identify a new client
-			socket.name = socket.remoteAddress + ":" + socket.remotePort;
+			const socket = new DuoSocket(tcp);
 			console.log('SV GOT CLIENT:', socket.name);
 			
-			// Send a nice welcome message and announce
-			this.encode({version: this.protocol.version}, (err, bytes) => {
-				if (err) {
-					return console.error(err);
-				}
-				socket.write(bytes);
-			});
-			
-			
 			// Listen to handshake
-			socket.once('data', (data) => { this.handshake(socket, data); });
+			socket.once('packet', binary => this.handshake(socket, binary));
+			
+			this.encode({version: this.protocol.version}, socket.sending);
+			socket.send();
 			
 		});
 		
 		this.serverTcp.on('error', (err) => {
-			// handle errors here
-			throw err;
+			console.error('Error', err);
 		});
 		
 		// grab a random port.
@@ -103,11 +89,11 @@ class Server extends Base {
 			},
 			() => {
 				console.log('TCP server-listener:', this.serverTcp.address());
-
+				
 			}
 		);
 		
-		this.serverUdp = dgram.createSocket({type:'udp4', reuseAddr: true});
+		
 		
 		this.serverUdp.on('listening', () => {
 			const address = this.serverUdp.address();
@@ -153,45 +139,8 @@ class Server extends Base {
 	close(cb) {
 		
 		super.close(cb);
-	}
-	
-	
-	weak() {
-		
-		if ( ! this._frame.length ) {
-			return;
-		}
-		
-		this.encode(this._frame, (err, data) => {
-			this._clients.forEach((socket) => {
-				this.serverUdp.send(data, 0, data.length, socket.remotePort + 1, socket.remoteAddress);
-			});
-		});
-		
-		this._frame = [];
 		
 	}
-	
-	
-	strong(msg) {
-		this.encode(msg, (err, data) => {
-			this._clients.forEach((socket) => {
-				socket.write(data);
-			});
-		});
-	}
-	
-	
-	send(id, msg) {
-		if (this.protocol.getChannel(id) === 'tcp') {
-			const packet = {};
-			packet[id] = msg;
-			this.strong(packet);
-		} else {
-			this._frame[id] = msg;
-		}
-	}
-	
 	
 	bcl(cb) {
 		
