@@ -2,7 +2,8 @@
 
 const EventEmitter = require('events');
 
-const Binary = require('./binary');
+const Binary    = require('./utils/binary');
+const DuoSocket = require('./utils/duo-socket');
 
 /**
  * Mpact networking entity

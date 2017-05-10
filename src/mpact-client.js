@@ -2,79 +2,62 @@
 
 
 const dgram = require('dgram');
-const Address = require('./address');
-const MpAct = require('./mpact');
-const net = require('net');
+const net   = require('net');
+
+const Binary = require('./utils/binary');
+const MpAct  = require('./mpact');
+
 
 /**
  * Network client
  * @author Luis Blanco
  * @extends MpAct
  */
-class Client extends Base {
+class Client extends MpAct {
 	
 	constructor(protocol) {
 		
 		super(protocol);
 		
-		
 		this._servers = [];
+		
+		// Prepare a binary buffer with server's greeting
+		this._respondBinary = new Binary();
+		this._respondBinary.pushString(this.protocol.identity);
+		
+		// Prepare a binary buffer for echo
+		this._echoBuffer = new Buffer(`mpact-bcast-ping-${this._protocol.identity}`);
+		this._pongRegex = /^mpact\-bcast\-pong\-/;
+		
+		// Prepare echo socket
+		this._echo = dgram.createSocket({type:'udp4', reuseAddr: true});
+		this._echo.on('message', (data, remote) => {
+			const pong = data.toString();
+			// Compare and respond only to the same protocol
+			if (this._pongRegex.test(pong)) {
+				const port = parseInt(pong.replace(this._pongRegex, ''));
+				if (port) {
+					this._servers.push({ host: remote.address, port });
+				}
+			}
+		});
+		this._echo.bind({ host: '0.0.0.0' });
 		
 	}
 	
 	open(opts, cb) {
 		
-		this._remoteAddress = opts.address || new Address(opts.host, opts.port);
+		this._remote = opts.remote;
 		
-		this.udpClient = dgram.createSocket({type:'udp4', reuseAddr: true});
-		
-		this.tcpClient = net.createConnection(
-			{
-				port: this._remoteAddress.port,
-				host: this._remoteAddress.host,
-				// localPort: 27321,
-			},
-			() => {
+		this._client = net.createConnection(this._remote, () => {
 				
-				
-				
-				console.log('TCP client-listener:', this.tcpClient.address());
-				const addr = this.tcpClient.address();
-				this._localAddress = new Address(addr.address, addr.port);
-				
-				super.open(cb);
-				
-				this.udpClient.on('listening', () => {
-					// var address = this.udpClient.address();
-					console.log('UDP client:', this._localAddress.host, this._localAddress.port+1);
-					
-				});
-				
-				this.udpClient.on('message', (data, remote) => {
-					
-					if (
-							this._remoteAddress.host === remote.address &&
-							(this._remoteAddress.port + 1) === remote.port
-						) {
-						console.log('CL UDP msg from:', this._remoteAddress);
-						
-						this.process(this.decode(data));
-						
-					} else {
-						console.log('CL UDP unknown:' + remote.address + ":" + remote.port,
-							'vs', this._remoteAddress, data.toString());
-					}
-					
-					
-				});
-				
-				this.udpClient.bind({ port: this._localAddress.port + 1, host: '0.0.0.0', exclusive: true });
-				
+				this._port = this.tcpClient.address().port;
+				super.open(Object.assign({}, opts, { port: this._port}), cb);
 				
 			}
 		);
 		
-		this.initSocket(tcpClient);
+		this.initSocket(this._client);
 		
 	}
 	
@@ -85,9 +68,10 @@ class Client extends Base {
 		const version = binary.pullString();
 		
 		// Version check
-		if (msg.version === this.protocol.version) {
+		if (version === this.protocol.version) {
 			
 			this.tcpClient.on('packet', (data) => {
+				
 				
 				
 			});
@@ -96,21 +80,6 @@ class Client extends Base {
 				this.tcpClient.write(data);
 			});
 			
-		}
-		
-	}
-	
-	
-	_readEcho(data, remote) {
-		
-		const msgString = data.toString();
-		
-		if (
-				/^bcast\-pong/.test(msgString) &&
-				(msgString.replace(/^bcast\-pong/, '') >> 0)
-			) {
-			this._servers.push(new Address(remote.address, msgString.replace(/^bcast\-pong/,'') >> 0));
-			cb();
 		}
 		
 	}

@@ -1,10 +1,11 @@
 'use strict';
 
+const async = require('async');
 const dgram = require('dgram');
-const Address = require('./address');
-const DuoSocket = require('./duo-socket');
-const MpAct = require('./mpact');
-const net = require('net');
+const net   = require('net');
+
+const MpAct  = require('./mpact');
+const Binary = require('./utils/binary');
 
 
 /**
@@ -27,10 +28,6 @@ class Server extends MpAct {
 		this._server = net.createServer(tcp => this.initSocket(tcp));
 		this._server.on('error', err => console.error('Error', err));
 		
-		// Prepare a binary buffer for echo
-		this._echoBuffer = new Buffer('mpact-bcast-pong-' + this._address.port);
-		this._pingString = `mpact-bcast-ping-${this._protocol.identity}`;
-		
 		// Prepare echo socket
 		this._echo = dgram.createSocket({type:'udp4', reuseAddr: true});
 		this._echo.on('message', (data, remote) => {
@@ -45,7 +42,6 @@ class Server extends MpAct {
 				);
 			}
 		});
-		this._echo.bind({ host: '0.0.0.0' });
 		
 	}
 	
@@ -89,9 +85,7 @@ class Server extends MpAct {
 		// Check protocol identity
 		if (identity === this._protocol.identity) {
 			console.log('SV CLIENT ACCEPTED!');
-			
 			this.addSocket(socket);
-			
 		} else {
 			socket.destroy();
 		}
@@ -107,6 +101,10 @@ class Server extends MpAct {
 			port     : opts.port || 27000,
 			exclusive: true,
 		};
+		
+		// Prepare a binary buffer for echo
+		this._echoBuffer = new Buffer('mpact-bcast-pong-' + this._address.port);
+		this._pingString = `mpact-bcast-ping-${this._protocol.identity}`;
 		
 		async.parallel(
 			[
