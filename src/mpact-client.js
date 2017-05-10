@@ -3,14 +3,13 @@
 
 const dgram = require('dgram');
 const Address = require('./address');
-const Base = require('./base');
+const MpAct = require('./mpact');
 const net = require('net');
 
 /**
  * Network client
  * @author Luis Blanco
- * @extends Base
- * @memberof RauNet
+ * @extends MpAct
  */
 class Client extends Base {
 	
@@ -18,9 +17,8 @@ class Client extends Base {
 		
 		super(protocol);
 		
-		this._servers = [];
 		
-		this._frame = [];
+		this._servers = [];
 		
 	}
 	
@@ -76,49 +74,45 @@ class Client extends Base {
 			}
 		);
 		
-		
-		// Listen to version
-		this.tcpClient.once('data', (data) => { this.handshake(data); });
-		
-		
-		this.tcpClient.on('end', () => {
-			console.log('TCP client disconnected.');
-		});
-		
-		
+		this.initSocket(tcpClient);
 		
 	}
 	
 	
-	handshake(data) {
-		console.log('CL GOT VERSION:', this.tcpClient.address(), data.toString());
+	handshake(socket, binary) {
+		console.log('CL GOT VERSION:', socket.name);
 		
+		const version = binary.pullString();
 		
-		this.decode(data, (err, msg) => {
-			// Version check
-			if (msg.version === this.protocol.version) {
+		// Version check
+		if (msg.version === this.protocol.version) {
+			
+			this.tcpClient.on('packet', (data) => {
 				
-				this.tcpClient.on('data', (data) => {
-					
-					this.decode(data, (err, msg) => {
-						this.process(msg);
-					});
-					
-				});
 				
-				this.encode({identity: this.protocol.identity}, (err, data) => {
-					this.tcpClient.write(data);
-				});
-				
-			}
-		});
-		
+			});
+			
+			this.encode({identity: this.protocol.identity}, (err, data) => {
+				this.tcpClient.write(data);
+			});
+			
+		}
 		
 	}
 	
 	
-	process(packet) {
-		console.log('CL PROCESS MSG AT:', this.tcpClient.address());
+	_readEcho(data, remote) {
+		
+		const msgString = data.toString();
+		
+		if (
+				/^bcast\-pong/.test(msgString) &&
+				(msgString.replace(/^bcast\-pong/, '') >> 0)
+			) {
+			this._servers.push(new Address(remote.address, msgString.replace(/^bcast\-pong/,'') >> 0));
+			cb();
+		}
+		
 	}
 	
 	
@@ -127,47 +121,14 @@ class Client extends Base {
 	}
 	
 	
-	weak() {
-		
-		if ( ! this._frame.length ) {
-			return;
-		}
-		
-		this.encode(this._frame, (err, data) => {
-			this.udpClient.send(data, 0, data.length, this._address.port + 1, this._address.ip);
-		});
-		this._frame = [];
-		
-	}
-	
-	
-	strong(msg) {
-		this.encode(msg, (err, data) => {
-			this.tcpClient.write(data);
-		});
-	}
-	
-	
-	send(id, msg) {
-		if (this.protocol.getChannel(id) === 'tcp') {
-			this.strong(msg);
-		} else {
-			this._frame[id] = msg;
-		}
-	}
-	
-	
-	get serverList() {
-		return this._servers;
-	}
-	
-	listServers(cb) {
+	localServers(cb) {
 		
 		if ( ! this.udpBcaster ) {
 			
-			this.bcastMsg = new Buffer('bcast-ping');
+			this._echoString = 'mpact-bcast-ping-';
+			this._echoBuffer = new Buffer(`${this._echoString}${this._protocol.identity}`);
 			
-			this.udpBcaster = dgram.createSocket({type:'udp4', reuseAddr: true});
+			this._echo = dgram.createSocket({type:'udp4', reuseAddr: false});
 			
 			this.udpBcaster.on('listening', () => {
 				var address = this.udpBcaster.address();

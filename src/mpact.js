@@ -30,6 +30,9 @@ class MpAct extends EventEmitter {
 		this._socklist = [];
 		this._sockets  = {};
 		
+		// Prepare a binary buffer for socket ids
+		this._socketIdBuffer = Buffer.allocUnsafe(1);
+		
 		this._tcpOut = new Binary();
 		this._tcpOut.pushUint16(0);
 		this._udpOut = new Binary();
@@ -40,11 +43,29 @@ class MpAct extends EventEmitter {
 		this._tcpOutPacket   = [];
 		this._udpOutPacket   = [];
 		
+		this._ids = new Array(256);
+		for (let i = 0; i < 256; i++) {
+			this._ids[i] = i;
+		}
+		
+		this._udp  = dgram.createSocket({type:'udp4', reuseAddr: true});
+		this._udp.on('message', this._receiveUdp.bind(this));
+		
 	}
+	
+	
+	_receiveUdp(data, remote) {
+		const socket = this._sockets[remote.address + ':' + (remote.port + 1)];
+		if (socket) {
+			socket.receiveUdp(data);
+		}
+	}
+	
 	
 	dispatch(action) {
 		
 		if (this._protocol.isReliable[action.type]) {
+			
 			if (this._protocol.isReset[action.type]) {
 				if (this._resetTcpOutIdx[action.type]) {
 					this._tcpOutPacket[this._resetTcpOutIdx[action.type]] = action;
@@ -55,9 +76,9 @@ class MpAct extends EventEmitter {
 			} else {
 				this._tcpOutPacket.push(action.type);
 			}
-			// this._protocol.encode(this._channel.tcpOut, action);
+			
 		} else {
-			// this._protocol.encode(this._channel.udpOut, action);
+			
 			if (this._protocol.isReset[action.type]) {
 				if (this._resetTcpOutIdx[action.type]) {
 					this._tcpOutPacket[this._resetTcpOutIdx[action.type]] = action;
@@ -68,14 +89,49 @@ class MpAct extends EventEmitter {
 			} else {
 				this._tcpOutPacket.push(action.type);
 			}
+			
 		}
 		
 	}
 	
 	
-	pushSocket(socket) {
+	initSocket(tcp) {
 		
-		// Put this new client in the list
+		const socket = new DuoSocket(tcp, this._udp);
+		console.log('GOT NEW SOCKET:', socket.name);
+		
+		// Listen to handshake
+		socket.once('packet', binary => this.handshake(socket, binary));
+		greet(socket);
+		
+	}
+	
+	
+	greet() {}
+	
+	
+	handshake(socket, binary) {
+		throw new Error('MpAct::handshake(socket, binary) is pure virtual.');
+	}
+	
+	
+	_nextId() {
+		return this._ids.shift();
+	}
+	
+	
+	_freeId(id) {
+		this._ids.push(id);
+	}
+	
+	
+	addSocket(socket) {
+		
+		socket.id = this._nextId();
+		
+		this._socketIdBuffer.writeUInt8(socket.id, 0);
+		socket.writeTcpRaw(this._socketIdBuffer);
+		
 		this._socklist.push(socket);
 		this._sockets[socket.name] = socket;
 		
@@ -84,10 +140,16 @@ class MpAct extends EventEmitter {
 		// Remove the client from the list when it leaves
 		socket.on('end', () => {
 			console.log('SOCKET ENDED:', socket.name);
-			this._clist.splice(this._clients.indexOf(socket), 1);
-			delete this._clients[socket.name];
+			remSocket(socket);
 		});
 		
+	}
+	
+	
+	remSocket(socket) {
+		this._freeId(socket.id);
+		this._clist.splice(this._clients.indexOf(socket), 1);
+		delete this._clients[socket.name];
 	}
 	
 	
@@ -95,9 +157,19 @@ class MpAct extends EventEmitter {
 	 * Marks network entity as active, open
 	 * @arg {function} cb
 	 */
-	open(cb) {
+	open(opts, cb) {
+		
 		this._isOpen = true;
-		cb();
+		this._frameTimer = setInterval(this._sendFrame.bind(this), 20);
+		
+		const udpAddress = {
+			host: '0.0.0.0',
+			port: (opts.port || 27000) + 1,
+			exclusive: true,
+		};
+		this._udp.bind(udpAddress);
+		this._udp.on('listening', () => cb());
+		
 	}
 	
 	
@@ -107,6 +179,8 @@ class MpAct extends EventEmitter {
 	 */
 	close(cb) {
 		this._isOpen = false;
+		clearInterval(this._frameTimer);
+		this._frameTimer = null;
 		cb();
 	}
 	
@@ -125,7 +199,7 @@ class MpAct extends EventEmitter {
 	
 	
 	
-	send() {
+	_sendFrame() {
 		
 		if (this._tcpOutPacket.length > 0) {
 			
@@ -196,6 +270,48 @@ class MpAct extends EventEmitter {
 		actions.forEach(action => {
 			this._protocol.encode(binary, action);
 		});
+		
+	}
+	
+	
+	listServers(cb) {
+		
+		if ( ! this.udpBcaster ) {
+			
+			this.bcastMsg = new Buffer('bcast-ping');
+			
+			this.udpBcaster = dgram.createSocket({type:'udp4', reuseAddr: true});
+			
+			this.udpBcaster.on('listening', () => {
+				var address = this.udpBcaster.address();
+				console.log('UDP bcast-client:' + address.address + ":" + address.port);
+				this.udpBcaster.setBroadcast(true);
+				
+			});
+			
+			this.udpBcaster.on('message', (message, remote) => {
+				const msgString = message.toString();
+				console.log('UDP bcast-res:', remote.address + ':' + remote.port, msgString);
+				console.log(/^bcast\-pong/.test(msgString), (msgString.replace(/^bcast\-pong/,'') >> 0));
+				
+				if (
+						/^bcast\-pong/.test(msgString) &&
+						(msgString.replace(/^bcast\-pong/, '') >> 0)
+					) {
+					console.log('SV!');
+					this._servers.push(new Address(remote.address, msgString.replace(/^bcast\-pong/,'') >> 0));
+					cb();
+				}
+				
+			});
+			
+			this.udpBcaster.bind({ port: 27931, host: '0.0.0.0' });
+			
+		}
+		
+		this._servers = [];
+		
+		this.udpBcaster.send(this.bcastMsg, 0, this.bcastMsg.length, 27932, '255.255.255.255');
 		
 	}
 	
