@@ -19,65 +19,103 @@ class Client extends MpAct {
 		
 		super(protocol);
 		
-		this._servers = [];
-		
-		// Prepare a binary buffer with server's greeting
+		// Prepare a binary buffer with client's identity
 		this._respondBinary = new Binary();
+		this._respondBinary.pushUint16(0);
 		this._respondBinary.pushString(this.protocol.identity);
+		this._respondBinary.pos = 0;
+		this._respondBinary.pushUint16(this._respondBinary.size);
+		console.log('RESSIZE', this._respondBinary.size);
 		
 		// Prepare a binary buffer for echo
 		this._echoBuffer = new Buffer(`mpact-bcast-ping-${this._protocol.identity}`);
-		this._pongRegex = /^mpact\-bcast\-pong\-/;
+		this._echoRegex = /^mpact\-bcast\-pong\-/;
 		
 		// Prepare echo socket
 		this._echo = dgram.createSocket({type:'udp4', reuseAddr: true});
+		this._echoPort = 27932;
+		this._echoServers = [];
+		
+		this._echoActive  = null;
+		this._echoPrev    = null;
+		this._echoTimeout = 2000;
+		this._echoTotal   = 10000;
+		
+		this._echoTotalTimer = null;
+		this._echoTimeoutTimer = null;
+		
 		this._echo.on('message', (data, remote) => {
+			
+			console.log('CL GOT ECHO:', this._echoActive, data.toString());
+			
+			if ( ! this._echoActive ) {
+				console.log('ECHO ALREADY INACTIVE!');
+				return;
+			}
+			
+			this._echoPrev = Date.now();
+			
 			const pong = data.toString();
 			// Compare and respond only to the same protocol
-			if (this._pongRegex.test(pong)) {
-				const port = parseInt(pong.replace(this._pongRegex, ''));
+			if (this._echoRegex.test(pong)) {
+				const port = parseInt(pong.replace(this._echoRegex, ''));
 				if (port) {
-					this._servers.push({ host: remote.address, port });
+					
+					const server = { host: remote.address, port };
+					this._echoServers.push(server);
+					this.emit('server', server);
+					
 				}
 			}
+			
 		});
-		this._echo.bind({ host: '0.0.0.0' });
+		
+		this._echo.bind();
+		this._echo.on('listening', () => this._echo.setBroadcast(true));
 		
 	}
 	
 	open(opts, cb) {
 		
+		if ( ! opts.remote ) {
+			return;
+		}
+		
 		this._remote = opts.remote;
 		
 		this._client = net.createConnection(this._remote, () => {
 				
-				this._port = this.tcpClient.address().port;
-				super.open(Object.assign({}, opts, { port: this._port}), cb);
+				this._port = this._client.address().port;
+				this.initSocket(this._client);
+				
+				super.open(Object.assign({}, opts, { port: this._port }), cb);
 				
 			}
 		);
-		
-		this.initSocket(this._client);
 		
 	}
 	
 	
 	handshake(socket, binary) {
-		console.log('CL GOT VERSION:', socket.name);
 		
+		console.log('CL GOT HANDSHAKE:', socket.name);
+		
+		binary.pos = 0;
 		const version = binary.pullString();
 		
 		// Version check
 		if (version === this.protocol.version) {
+			console.log('CL HANDSHAKE OK');
+			this._client.writeTcp(this._respondBinary);
 			
-			this.tcpClient.on('packet', (data) => {
+			// Next packet should contain an ID
+			this._client.on('packet', (socket, binary) => {
 				
+				binary.pos = 0;
+				socket.id = binary.pullUint8();
+				console.log('CLIENT GOT ID:', socket.id);
+				this.addSocket(socket);
 				
-				
-			});
-			
-			this.encode({identity: this.protocol.identity}, (err, data) => {
-				this.tcpClient.write(data);
 			});
 			
 		}
@@ -89,45 +127,37 @@ class Client extends MpAct {
 		super.close(cb);
 	}
 	
+	_stopEcho(cb) {
+		this._echoActive = true;
+		this._echoPrev = Date.now();
+		
+		clearTimeout(this._echoTotalTimer);
+		this._echoTotalTimer = null;
+		
+		clearInterval(this._echoTimeoutTimer);
+		this._echoTimeoutTimer = null;
+		
+		cb(null, this._echoServers);
+	}
+	
+	_checkEcho(cb) {
+		if (Date.now() - this._echoPrev > this._echoTimeout) {
+			this._stopEcho(cb);
+		}
+	}
 	
 	localServers(cb) {
 		
-		if ( ! this.udpBcaster ) {
-			
-			this._echoString = 'mpact-bcast-ping-';
-			this._echoBuffer = new Buffer(`${this._echoString}${this._protocol.identity}`);
-			
-			this._echo = dgram.createSocket({type:'udp4', reuseAddr: false});
-			
-			this.udpBcaster.on('listening', () => {
-				var address = this.udpBcaster.address();
-				console.log('UDP bcast-client:' + address.address + ":" + address.port);
-				this.udpBcaster.setBroadcast(true);
-				
-			});
-			
-			this.udpBcaster.on('message', (message, remote) => {
-				const msgString = message.toString();
-				console.log('UDP bcast-res:', remote.address + ':' + remote.port, msgString);
-				console.log(/^bcast\-pong/.test(msgString), (msgString.replace(/^bcast\-pong/,'') >> 0));
-				if (
-						/^bcast\-pong/.test(msgString) &&
-						(msgString.replace(/^bcast\-pong/, '') >> 0)
-					) {
-					console.log('SV!');
-					this._servers.push(new Address(remote.address, msgString.replace(/^bcast\-pong/,'') >> 0));
-					cb();
-				}
-				
-			});
-			
-			this.udpBcaster.bind({ port: 27931, host: '0.0.0.0' });
-			
-		}
+		this._echoServers = [];
+		this._echoActive = true;
+		this._echoPrev = Date.now();
 		
-		this._servers = [];
+		console.log('CL SEND ECHO:', this._echoBuffer.toString());
+		this._echo.send(this._echoBuffer, 0, this._echoBuffer.length, this._echoPort, '255.255.255.255');
 		
-		this.udpBcaster.send(this.bcastMsg, 0, this.bcastMsg.length, 27932, '255.255.255.255');
+		this._echoTotalTimer = setTimeout(this._stopEcho.bind(this, cb), this._echoTotal);
+		this._echoTimeoutTimer = setInterval(this._checkEcho.bind(this, cb), this._echoTimeout);
+		
 		
 	}
 	

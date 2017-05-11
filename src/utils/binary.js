@@ -15,6 +15,8 @@ class Binary {
 	 */
 	constructor(opts) {
 		
+		opts = opts || {};
+		
 		this._pos  = 0;
 		this._size = 0;
 		
@@ -22,17 +24,23 @@ class Binary {
 		
 	}
 	
-	flush() {
-		this._pos  = 0;
-		this._size = 0;
-	}
+	get size() { return this._size; }
+	get length() { return this._size; }
 	
-	skip(bytes) {
-		this._pos += bytes;
-	}
+	get pos() { return this._pos; }
+	set pos(v) { this._pos = v; this._size = Math.max(this._size, this._pos); }
 	
-	back(bytes) {
-		this._pos -= bytes;
+	flush(ammount) {
+		
+		if (ammount && ammount < this._size) {
+			this._buffer.copy(this._buffer, 0, ammount, this._size);
+			this._pos  = Math.max(0, this._pos - ammount);
+			this._size -= ammount;
+		} else {
+			this._pos  = 0;
+			this._size = 0;
+		}
+		
 	}
 	
 	pushBits(value) {
@@ -53,43 +61,37 @@ class Binary {
 	}
 	
 	pushUint8(value) {
-		this._pos = this._buffer.writeUInt8(value, this._pos);
-		this._size = this._pos;
+		this.pos = this._buffer.writeUInt8(value, this._pos);
 	}
 	
 	pushUint16(value) {
-		this._pos = this._buffer.writeUInt16BE(value, this._pos);
-		this._size = this._pos;
+		this.pos = this._buffer.writeUInt16BE(value, this._pos);
 	}
 	
 	pushUint32(value) {
-		this._pos = this._buffer.writeUInt32BE(value, this._pos);
-		this._size = this._pos;
+		this.pos = this._buffer.writeUInt32BE(value, this._pos);
 	}
 	
 	pushInt8(value) {
-		this._pos = this._buffer.writeInt8(value, this._pos);
-		this._size = this._pos;
+		this.pos = this._buffer.writeInt8(value, this._pos);
 	}
 	
 	pushInt16(value) {
-		this._pos = this._buffer.writeInt16BE(value, this._pos);
-		this._size = this._pos;
+		this.pos = this._buffer.writeInt16BE(value, this._pos);
 	}
 	
 	pushInt32(value) {
-		this._pos = this._buffer.writeInt32BE(value, this._pos);
-		this._size = this._pos;
+		this.pos = this._buffer.writeInt32BE(value, this._pos);
 	}
 	
 	pushFloat(value) {
-		this._pos = this._buffer.writeFloatBE(value, this._pos);
-		this._size = this._pos;
+		this.pos = this._buffer.writeFloatBE(value, this._pos);
 	}
 	
 	pushBuffer(value) {
-		this._pos += value.copy(this._buffer, this._pos);
-		this._size = this._pos;
+		this.pushUint16(value.length);
+		value.copy(this._buffer, this._pos);
+		this.pos += value.length;
 	}
 	
 	pushString(value) {
@@ -100,8 +102,7 @@ class Binary {
 		
 		this._pos = prevPos;
 		this.pushUint16(len);
-		this._pos = this._pos + 2 + len;
-		this._size = this._pos;
+		this.pos = this._pos + len;
 		
 	}
 	
@@ -123,59 +124,70 @@ class Binary {
 	
 	pullUint8() {
 		const value = this._buffer.readUInt8(this._pos);
-		this._pos += 1;
+		this.pos += 1;
 		return value;
 	}
 	
 	pullUint16() {
 		const value = this._buffer.readUInt16BE(this._pos);
-		this._pos += 2;
+		this.pos += 2;
 		return value;
 	}
 	
 	pullUint32() {
 		const value = this._buffer.readUInt32BE(this._pos);
-		this._pos += 4;
+		this.pos += 4;
 		return value;
 	}
 	
 	pullInt8() {
 		const value = this._buffer.readInt8(this._pos);
-		this._pos += 1;
+		this.pos += 1;
 		return value;
 	}
 	
 	pullInt16() {
 		const value = this._buffer.readInt16BE(this._pos);
-		this._pos += 2;
+		this.pos += 2;
 		return value;
 	}
 	
 	pullInt32() {
 		const value = this._buffer.readInt32BE(this._pos);
-		this._pos += 4;
+		this.pos += 4;
 		return value;
 	}
 	
 	pullFloat() {
 		const value = this._buffer.readFloatBE(this._pos);
-		this._pos += 4;
+		this.pos += 4;
 		return value;
 	}
 	
-	readBuffer() {
-		const len = this._buffer.length - this._pos;
-		const value = Buffer.allocUnsafe(len);
-		this._buffer.copy(value, 0, this._pos);
-		this._pos += len;
-		return value;
-	}
-	
-	readString() {
+	pullBuffer() {
 		const len = this.pullUint16();
-		const value = this._buffer.toString(value, this._pos, len);
-		this._pos += len;
+		const value = Buffer.allocUnsafe(len);
+		this._buffer.copy(value, 0, this._pos, this._pos + len);
+		this.pos += len;
 		return value;
+	}
+	
+	pullString() {
+		const len = this.pullUint16();
+		const value = this._buffer.toString('utf8', this._pos, len);
+		this.pos += len;
+		return value;
+	}
+	
+	toBuffer() {
+		const value = Buffer.allocUnsafe(this._size);
+		this._buffer.copy(value, 0, 0, this._size);
+		return value;
+	}
+	
+	accumulate(value) {
+		value.copy(this._buffer, this._pos)
+		this.pos += value.length;
 	}
 	
 }

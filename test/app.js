@@ -37,22 +37,24 @@ const joinServer = (cb) => {
 	
 	const client = new mpact.Client(protocol);
 	
-	client.localServers(list => {
+	client.localServers((err, list) => {
 		
-		if (list.length === 1) {
-			
-			client.open(list[0], () => {
-				
-				console.log(`CLIENT#${++numClients} ONLINE.`);
-				
-				const game = new Game(client.id);
-				subscribe(client, game);
-				
-				cb();
-				
-			});
-			
+		if (list.length < 1) {
+			console.log('NO SERVERS FOUND!');
+			cb();
 		}
+		
+		client.open({ remote: list[0] }, () => {
+			
+			console.log(`CLIENT#${++numClients} ONLINE.`);
+			
+			const game = new Game(client.id);
+			subscribe(client, game);
+			
+			cb();
+			
+		});
+		
 	});
 	
 }

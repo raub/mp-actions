@@ -22,15 +22,29 @@ class Protocol {
 		
 		this._version = '' + (opts.version || 'none');
 		
+		if (opts.actions.__SVC) {
+			console.warn('Action name "__SVC" is forbidden.');
+			delete opts.actions.__SVC;
+		}
+		
 		this._actionKeys = Object.keys(opts.actions).sort();
 		this._actions = this._actionKeys.map((type, index) => {
 			return {
-				index,
-				type,
+				index   : index + 1,
+				type    : type,
 				reliable: opts.actions[type].reliable && true || false,
 				client  : opts.actions[type].client   && true || false,
 				reset   : opts.actions[type].reset    && true || false,
 			};
+		});
+		
+		this._actionKeys.unshift('__SVC');
+		this._actions.unshift({
+			index   : 0,
+			type    : '__SVC',
+			reliable: true,
+			client  : false,
+			reset   : false,
 		});
 		
 		const hash = crypto.createHash('sha256');
@@ -46,20 +60,23 @@ class Protocol {
 		this._decoders = {};
 		
 		this._actions.forEach(action => {
+			
 			this.isReliable[action.type] = action.reliable;
 			this.isClient[action.type]   = action.client;
 			this.isReset[action.type]    = action.reset;
 			this._index[action.type]     = action.index;
 			
-			this._encoders[action.type] = opts.actions[action.type].encode || this.encodeDefault;
-			this._decoders[action.type] = opts.actions[action.type].decode || this.decodeDefault;
+			this._encoders[action.type] = opts.actions[action.type] && opts.actions[action.type].encode || this.encodeDefault;
+			this._decoders[action.type] = opts.actions[action.type] && opts.actions[action.type].decode || this.decodeDefault;
 			
 		});
 		
-		if (this._actions.length >> 8 === 0) {
+		// Plus 1 system action #0 accounted
+		const lastId = this._actions.length;
+		if (lastId >> 8 === 0) {
 			this._pushIndex = 'pushUint8';
 			this._pullIndex = 'pullUint8';
-		} else if (this._actions.length >> 16 === 0) {
+		} else if (lastId >> 16 === 0) {
 			this._pushIndex = 'pushUint16';
 			this._pullIndex = 'pullUint16';
 		} else {

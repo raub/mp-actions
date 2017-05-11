@@ -23,6 +23,8 @@ class DuoSocket extends EventEmitter {
 		this._tcp = tcp;
 		this._udp = tcp;
 		
+		this._tcp.setNoDelay();
+		
 		this._name = this._tcp.remoteAddress + ':' + this._tcp.remotePort;
 		
 		this._pending = 0;
@@ -38,11 +40,15 @@ class DuoSocket extends EventEmitter {
 	_accumulate(data) {
 		
 		this._receivedTcp.accumulate(data);
-		
+		console.log(this.name, 'ACCUM', data.length);
 		if (this._pending === 0) {
+			this._receivedTcp.pos = 0;
 			this._pending = this._receivedTcp.pullUint16();
+			this._receivedTcp.pos = this._receivedTcp.size;
+			console.log(this.name, 'PEND', this._pending);
 		}
 		
+		console.log(this.name, 'CHECK SIZE', this._pending, this._receivedTcp.size);
 		if (this._pending <= this._receivedTcp.size) {
 			this.emit('packet', this._receivedTcp);
 			this._receivedTcp.flush(this._pending);
@@ -54,7 +60,8 @@ class DuoSocket extends EventEmitter {
 	
 	receiveUdp(data) {
 		
-		this._receivedTcp.accumulate(data);
+		this._receivedUdp.accumulate(data);
+		this._receivedUdp.pos = 0;
 		
 		const pending = this._receivedUdp.pullUint16();
 		
@@ -68,7 +75,9 @@ class DuoSocket extends EventEmitter {
 	
 	writeTcp(binary) {
 		
-		this._tcp.write(binary.toBuffer());
+		const buffer = binary.toBuffer();
+		this._tcp.write(buffer);
+		console.log(this.name, 'TCP SENT:', buffer.length);
 		
 	}
 	
