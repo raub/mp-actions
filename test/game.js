@@ -9,8 +9,13 @@ class Game extends EventEmitter {
 	
 	
 	// Prepare game data, might be server or client
-	construcror(opts) {
+	constructor(opts) {
 		
+		super();
+		
+		opts = opts || {};
+		
+		console.log('CL OPTS ID', opts.id);
 		this.state = {
 			id     : opts.id, // undefined for server
 			avx    : 0,
@@ -48,9 +53,10 @@ class Game extends EventEmitter {
 		this._updatePlayer();
 		
 		// Then update (predict) everybody
-		this.state.playerlist.forEach(player => {
+		this.state.plist.forEach(player => {
 			const vx = dt * ( (player.control.right?1:0) - (player.control.left?1:0) );
 			this.apply({ type: 'SV_X', data: { x: player.x + vx, id: player.id } });
+			this.apply({ type: 'SV_CONTROL', data: { id: player.id, control: player.control } });
 		});
 		
 	}
@@ -65,12 +71,14 @@ class Game extends EventEmitter {
 	
 	// For join event
 	join(id) {
+		console.log('JOINED:', id);
 		this.dispatch({ type: 'ADD_PLAYER', data: id });
 	}
 	
 	
 	// For drop event
 	drop(id) {
+		console.log('DROPED:', id);
 		this.dispatch({ type: 'REM_PLAYER', data: id });
 	}
 	
@@ -80,6 +88,7 @@ class Game extends EventEmitter {
 		switch(action.type) {
 			
 			case 'ADD_PLAYER':
+				console.log('\n\n\nADP');
 				// TODO: make a class maybe? or even two...
 				const player = {
 					id: action.data,
@@ -88,8 +97,9 @@ class Game extends EventEmitter {
 					settings: {},
 					control : new Control(),
 				};
+				
 				this.state.players[action.data] = player;
-				this.state.playerlist.push(player);
+				this.state.plist.push(player);
 				
 				if (this.state.id === action.data) {
 					this._updatePlayer = function () {
@@ -97,6 +107,7 @@ class Game extends EventEmitter {
 						if (player.control.quit) {
 							this.emit('quit');
 						}
+						console.log('CLC');
 						this.apply({ type: 'CL_CONTROL', data: player.control.toArray() });
 					};
 				}
@@ -105,7 +116,7 @@ class Game extends EventEmitter {
 				
 			case 'REM_PLAYER':
 				delete this.state.players[action.data];
-				this.state.playerlist = this.state.playerlist.filter(p => p.id !== action.data);
+				this.state.plist = this.state.playerlist.filter(p => p.id !== action.data);
 				if (this.state.id === action.data) {
 					this._updatePlayer = ()=>{};
 				}
@@ -114,11 +125,13 @@ class Game extends EventEmitter {
 			// Controls data FROM client - resent by server
 			case 'CL_CONTROL':
 				
-				if (action.clid) {
+				if (action.clid !== undefined) {
 					// Serverside: transmit to all other clients
-					this.apply({ type: 'SV_CONTROL', data: { id: action.clid, control: action.data } });
+					// this.apply({ type: 'SV_CONTROL', data: { id: action.clid, control: action.data } });
+					this.state.players[action.clid].control.fromArray(action.data);
 				} else {
 					// Clientside: apply immediately
+					console.log('this.state.id', this.state.id);
 					this.state.players[this.state.id].control.fromArray(action.data);
 				}
 				
@@ -140,7 +153,7 @@ class Game extends EventEmitter {
 				
 			// Chat message FROM client - resent by server
 			case 'CL_CHAT':
-				if (action.clid) {
+				if (action.clid !== undefined) {
 					this.apply({ type: 'SV_CHAT', data: { id: action.clid, control: action.data } });
 				}
 				break;

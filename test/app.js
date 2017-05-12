@@ -32,7 +32,6 @@ const createServer = (cb) => {
 	
 };
 
-let numClients = 0;
 const joinServer = (cb) => {
 	
 	const client = new mpact.Client(protocol);
@@ -46,9 +45,9 @@ const joinServer = (cb) => {
 		
 		client.open({ remote: list[0] }, () => {
 			
-			console.log(`CLIENT#${++numClients} ONLINE.`);
+			console.log(`CLIENT#${client.id} ONLINE.`);
 			
-			const game = new Game(client.id);
+			const game = new Game({ id: client.id });
 			subscribe(client, game);
 			
 			cb();
@@ -64,8 +63,8 @@ async.series(
 	[
 		cb => createServer(cb),
 		cb => joinServer(cb),
-		cb => joinServer(cb),
-		cb => joinServer(cb),
+		// cb => joinServer(cb),
+		// cb => joinServer(cb),
 	],
 	
 	err => {

@@ -26,7 +26,7 @@ class Server extends MpAct {
 		this._greetBinary.pushString(this.protocol.version);
 		this._greetBinary.pos = 0;
 		this._greetBinary.pushUint16(this._greetBinary.size);
-		console.log('GREETSIZE', this._greetBinary.size);
+		console.log('GREETSIZE', this._greetBinary.size, this._greetBinary.toBuffer());
 		
 		// Prepare a binary buffer for socket ids
 		this._idBinary = new Binary();
@@ -77,11 +77,12 @@ class Server extends MpAct {
 	
 	
 	// Actions that came from the network
-	emitActions(binary) {
+	emitActions(binary, socket) {
 		
 		this._readPacket(binary).forEach(action => {
 			// Only "client" actions can be consumed by the server
 			if ( this._protocol.isClient[action.type] ) {
+				action.clid = socket.id;
 				this.emit('action', action);
 			}
 		});
@@ -91,22 +92,20 @@ class Server extends MpAct {
 	
 	// Say hello upon client connection
 	greet(socket) {
-		console.log('SV GREET');
 		socket.writeTcp(this._greetBinary);
 	}
 	
 	
 	// Expect client identity to decide if let through
-	handshake(socket, binary) {
+	handshake(binary, socket) {
 		
 		console.log('SV GOT HANDSHAKE:', socket.name);
 		
-		binary.pos = 0;
+		binary.pos = 2;
 		const identity = binary.pullString();
 		
 		// Check protocol identity
 		if (identity === this._protocol.identity) {
-			console.log('SV CLIENT ACCEPTED!');
 			this.addSocket(socket);
 		} else {
 			console.log('SV CLIENT REJECTED!');

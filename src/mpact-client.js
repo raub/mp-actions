@@ -15,9 +15,18 @@ const MpAct  = require('./mpact');
  */
 class Client extends MpAct {
 	
+	get id() { return this._id; }
+	
 	constructor(protocol) {
 		
 		super(protocol);
+		
+		this._id = null;
+		this._cb = ()=>{};
+		
+		this._client = null;
+		this._remote = null;
+		this._port   = null;
 		
 		// Prepare a binary buffer with client's identity
 		this._respondBinary = new Binary();
@@ -25,7 +34,6 @@ class Client extends MpAct {
 		this._respondBinary.pushString(this.protocol.identity);
 		this._respondBinary.pos = 0;
 		this._respondBinary.pushUint16(this._respondBinary.size);
-		console.log('RESSIZE', this._respondBinary.size);
 		
 		// Prepare a binary buffer for echo
 		this._echoBuffer = new Buffer(`mpact-bcast-ping-${this._protocol.identity}`);
@@ -81,6 +89,10 @@ class Client extends MpAct {
 			return;
 		}
 		
+		this._stopEcho();
+		
+		this._cb = cb;
+		
 		this._remote = opts.remote;
 		
 		this._client = net.createConnection(this._remote, () => {
@@ -88,7 +100,12 @@ class Client extends MpAct {
 				this._port = this._client.address().port;
 				this.initSocket(this._client);
 				
-				super.open(Object.assign({}, opts, { port: this._port }), cb);
+				super.open(Object.assign({}, opts, { port: this._port }), err => {
+					if (err) {
+						this._cb(err);
+						this._cb = ()=>{};
+					}
+				});
 				
 			}
 		);
@@ -96,40 +113,58 @@ class Client extends MpAct {
 	}
 	
 	
-	handshake(socket, binary) {
+	handshake(binary, socket) {
 		
-		console.log('CL GOT HANDSHAKE:', socket.name);
+		console.log('CL GOT HANDSHAKE:', socket.name, binary.size, binary.toBuffer());
 		
-		binary.pos = 0;
+		binary.pos = 2;
 		const version = binary.pullString();
+		
+		console.log('CL VPULLED', version);
 		
 		// Version check
 		if (version === this.protocol.version) {
 			console.log('CL HANDSHAKE OK');
-			this._client.writeTcp(this._respondBinary);
+			socket.writeTcp(this._respondBinary);
 			
 			// Next packet should contain an ID
-			this._client.on('packet', (socket, binary) => {
+			socket.on('packet', binary => {
 				
-				binary.pos = 0;
+				binary.pos = 2;
 				socket.id = binary.pullUint8();
+				this._id = socket.id;
 				console.log('CLIENT GOT ID:', socket.id);
 				this.addSocket(socket);
 				
+				this._cb();
+				this._cb = ()=>{};
+				
 			});
 			
+		} else {
+			this._cb(new Error('Wrong server version.'));
+			this._cb = ()=>{};
 		}
 		
 	}
 	
 	
 	close(cb) {
+		this._cb = ()=>{};
+		this._remote = null;
+		this._client = null;
+		this._port   = null;
 		super.close(cb);
 	}
 	
-	_stopEcho(cb) {
-		this._echoActive = true;
-		this._echoPrev = Date.now();
+	_stopEcho() {
+		
+		if (this._echoActive === false) {
+			return;
+		}
+		
+		this._echoActive = false;
+		this._echoPrev = null;
 		
 		clearTimeout(this._echoTotalTimer);
 		this._echoTotalTimer = null;
@@ -137,17 +172,20 @@ class Client extends MpAct {
 		clearInterval(this._echoTimeoutTimer);
 		this._echoTimeoutTimer = null;
 		
-		cb(null, this._echoServers);
+		this._echoCb(null, this._echoServers);
+		this._echoCb = ()=>{};
+		
 	}
 	
-	_checkEcho(cb) {
+	_checkEcho() {
 		if (Date.now() - this._echoPrev > this._echoTimeout) {
-			this._stopEcho(cb);
+			this._stopEcho();
 		}
 	}
 	
 	localServers(cb) {
 		
+		this._echoCb = cb;
 		this._echoServers = [];
 		this._echoActive = true;
 		this._echoPrev = Date.now();
@@ -155,8 +193,8 @@ class Client extends MpAct {
 		console.log('CL SEND ECHO:', this._echoBuffer.toString());
 		this._echo.send(this._echoBuffer, 0, this._echoBuffer.length, this._echoPort, '255.255.255.255');
 		
-		this._echoTotalTimer = setTimeout(this._stopEcho.bind(this, cb), this._echoTotal);
-		this._echoTimeoutTimer = setInterval(this._checkEcho.bind(this, cb), this._echoTimeout);
+		this._echoTotalTimer = setTimeout(this._stopEcho.bind(this), this._echoTotal);
+		this._echoTimeoutTimer = setInterval(this._checkEcho.bind(this), this._echoTimeout);
 		
 		
 	}

@@ -12,7 +12,10 @@ module.exports = new mpact.Protocol({
 		CL_CONTROL: {
 			
 			client: true,
-			reset : true,
+			
+			hash(action) {
+				return action.type;
+			},
 			
 			encode(binary, data) { binary.pushBits(data); },
 			decode(binary) { return binary.pullBits(); },
@@ -37,13 +40,17 @@ module.exports = new mpact.Protocol({
 		
 		SV_X: {
 			
+			hash(action) {
+				return action.type + action.data.id;
+			},
+			
 			encode(binary, data) {
-				binary.writeUint8(data.id);
-				binary.writeFloat(data.x);
+				binary.pushUint8(data.id);
+				binary.pushFloat(data.x);
 			},
 			decode(binary) {
-				const id = binary.readUint8();
-				const x = binary.readFloat();
+				const id = binary.pullUint8();
+				const x = binary.pullFloat();
 				return { id, x };
 			},
 			

@@ -21,7 +21,7 @@ class DuoSocket extends EventEmitter {
 		super();
 		
 		this._tcp = tcp;
-		this._udp = tcp;
+		this._udp = udp;
 		
 		this._tcp.setNoDelay();
 		
@@ -40,19 +40,37 @@ class DuoSocket extends EventEmitter {
 	_accumulate(data) {
 		
 		this._receivedTcp.accumulate(data);
-		console.log(this.name, 'ACCUM', data.length);
+		
 		if (this._pending === 0) {
+			
+			if (this._receivedTcp.size < 2) {
+				return;
+			}
+			
 			this._receivedTcp.pos = 0;
 			this._pending = this._receivedTcp.pullUint16();
 			this._receivedTcp.pos = this._receivedTcp.size;
-			console.log(this.name, 'PEND', this._pending);
+			
+			console.log(this.name, 'PEND', this._pending, 'of', this._receivedTcp.size);
+			
 		}
 		
-		console.log(this.name, 'CHECK SIZE', this._pending, this._receivedTcp.size);
-		if (this._pending <= this._receivedTcp.size) {
-			this.emit('packet', this._receivedTcp);
+		console.log(this.name, 'CHECK', this._pending, 'of', this._receivedTcp.size);
+		while (this._pending > 0 && this._pending <= this._receivedTcp.size) {
+			
+			console.log(this.name, 'PACK', this._pending);
+			this.emit('packet', this._receivedTcp, this);
 			this._receivedTcp.flush(this._pending);
-			this._pending = 0;
+			
+			console.log(this.name, 'LOOKAT', this._receivedTcp.size);
+			if (this._receivedTcp.size > 1) {
+				this._pending = this._receivedTcp.pullUint16();
+			} else {
+				console.log(this.name, 'NEXT', this._receivedTcp.size);
+				this._receivedTcp.pos = this._receivedTcp.size;
+				this._pending = 0;
+			}
+			
 		}
 		
 	}
@@ -66,9 +84,11 @@ class DuoSocket extends EventEmitter {
 		const pending = this._receivedUdp.pullUint16();
 		
 		if (pending === this._receivedUdp.size) {
-			this.emit('packet', this._receivedUdp);
-			this._receivedUdp.flush(this._pending);
+			this.emit('packet', this._receivedUdp, this);
+		} else {
+			console.warn('A faulty udp packet received!');
 		}
+		this._receivedUdp.flush(this._pending);
 		
 	}
 	
@@ -85,6 +105,21 @@ class DuoSocket extends EventEmitter {
 	writeUdp(binary) {
 		
 		const buffer = binary.toBuffer();
+		this._udp.send(buffer, 0, buffer.length, this._tcp.remotePort + 1, this._tcp.remoteAddress);
+		
+	}
+	
+	
+	writeTcpRaw(buffer) {
+		
+		this._tcp.write(buffer);
+		console.log(this.name, 'TCP SENT:', buffer.length);
+		
+	}
+	
+	
+	writeUdpRaw(buffer) {
+		// console.log('1',this._udp);
 		this._udp.send(buffer, 0, buffer.length, this._tcp.remotePort + 1, this._tcp.remoteAddress);
 		
 	}

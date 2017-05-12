@@ -98,10 +98,11 @@ class Binary {
 		
 		const prevPos = this._pos;
 		this._pos += 2;
-		const len = this._buffer.write(value, this._pos);
+		const len = this._buffer.write(value, this._pos, undefined, 'utf8');
 		
 		this._pos = prevPos;
 		this.pushUint16(len);
+		
 		this.pos = this._pos + len;
 		
 	}
@@ -119,6 +120,8 @@ class Binary {
 				value[i] = (1 << bit) & byte;
 			}
 		}
+		
+		return value;
 		
 	}
 	
@@ -174,7 +177,11 @@ class Binary {
 	
 	pullString() {
 		const len = this.pullUint16();
-		const value = this._buffer.toString('utf8', this._pos, len);
+		const value = this._buffer.toString('utf8', this._pos, this._pos+len);
+		if (len === 0) {
+			console.log('000000', (new Error()).stack);
+		}
+		// console.log('STRPULL', this._pos, len, '->', value.length, value);
 		this.pos += len;
 		return value;
 	}

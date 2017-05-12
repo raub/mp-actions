@@ -43,7 +43,7 @@ class MpAct extends EventEmitter {
 		this._tcpOutPacket   = [];
 		this._udpOutPacket   = [];
 		
-		this._udp  = dgram.createSocket({type:'udp4', reuseAddr: true});
+		this._udp = dgram.createSocket({type:'udp4'/*, reuseAddr: true*/});
 		this._udp.on('message', this._receiveUdp.bind(this));
 		
 	}
@@ -59,30 +59,36 @@ class MpAct extends EventEmitter {
 	
 	dispatch(action) {
 		
+		const hash = this._protocol.hashers[action.type] && this._protocol.hashers[action.type](action);
+		
 		if (this._protocol.isReliable[action.type]) {
 			
-			if (this._protocol.isReset[action.type]) {
-				if (this._resetTcpOutIdx[action.type]) {
-					this._tcpOutPacket[this._resetTcpOutIdx[action.type]] = action;
+			if (hash) {
+				if (this._resetTcpOutIdx[hash]) {
+					this._tcpOutPacket[this._resetTcpOutIdx[hash]] = action;
 				} else {
-					this._resetTcpOutIdx[action.type] = this._tcpOutPacket.length;
-					this._tcpOutPacket.push(action.type);
+					this._resetTcpOutIdx[hash] = this._tcpOutPacket.length;
+					this._tcpOutPacket.push(action);
 				}
 			} else {
-				this._tcpOutPacket.push(action.type);
+				this._tcpOutPacket.push(action);
 			}
 			
 		} else {
 			
-			if (this._protocol.isReset[action.type]) {
-				if (this._resetTcpOutIdx[action.type]) {
-					this._tcpOutPacket[this._resetTcpOutIdx[action.type]] = action;
+			if (hash) {
+				if (this._resetUdpOutIdx[hash]) {
+					// console.log('-SET', action, this._resetUdpOutIdx[hash], this._udpOutPacket[0]);
+					this._udpOutPacket[this._resetUdpOutIdx[hash]] = action;
+					// console.log('+SET', action, this._resetUdpOutIdx[hash], this._udpOutPacket[0]);
 				} else {
-					this._resetTcpOutIdx[action.type] = this._tcpOutPacket.length;
-					this._tcpOutPacket.push(action.type);
+					this._resetUdpOutIdx[hash] = this._udpOutPacket.length;
+					this._udpOutPacket.push(action);
+					// console.log('PUSH', action, this._udpOutPacket[0]);
 				}
 			} else {
-				this._tcpOutPacket.push(action.type);
+				this._udpOutPacket.push(action);
+				// console.log('ADD', action, this._udpOutPacket[0]);
 			}
 			
 		}
@@ -96,7 +102,7 @@ class MpAct extends EventEmitter {
 		console.log('GOT NEW SOCKET:', socket.name);
 		
 		// Listen to handshake
-		socket.once('packet', binary => this.handshake(socket, binary));
+		socket.once('packet', this.handshake.bind(this));
 		this.greet(socket);
 		
 	}
@@ -105,23 +111,24 @@ class MpAct extends EventEmitter {
 	greet() {}
 	
 	
-	handshake(socket, binary) {
+	handshake(binary, socket) {
 		throw new Error('MpAct::handshake(socket, binary) is pure virtual.');
 	}
 	
 	
 	addSocket(socket) {
 		
-		socket.id = this._nextId();
-		
 		this._socklist.push(socket);
 		this._sockets[socket.name] = socket;
+		
+		this.emit('join', socket.id);
 		
 		socket.on('packet', this.emitActions.bind(this));
 		
 		// Remove the client from the list when it leaves
 		socket.on('end', () => {
 			console.log('SOCKET ENDED:', socket.name);
+			this.emit('drop', socket.id);
 			remSocket(socket);
 		});
 		
@@ -184,40 +191,26 @@ class MpAct extends EventEmitter {
 	_sendFrame() {
 		
 		if (this._tcpOutPacket.length > 0) {
-			
-			this._tcpOutPacket.forEach(action => {
-				this._protocol.encode(this._tcpOut, action);
-			});
+			console.log('this._tcpOutPacket', this._tcpOutPacket);
+			this._writePacket(this._tcpOut, this._tcpOutPacket);
 			this._tcpOutPacket = [];
+			this._resetTcpOutIdx = {};
 			
-			this._tcpOut.pos = 0;
-			this._tcpOut.pushUint16(this._tcpOut.size);
-			
-			this._socklist.forEach(socket => {
-				socket.writeTcp(this._tcpOut);
-			});
-			
+			const buf = this._tcpOut.toBuffer();
+			this._socklist.forEach(socket => socket.writeTcpRaw(buf));
 			this._tcpOut.flush();
-			this._tcpOut.pushUint16(0);
 			
 		}
 		
 		if (this._udpOutPacket.length > 0) {
+			console.log('this._udpOutPacket', this._udpOutPacket[0]);
+			this._writePacket(this._udpOut, this._udpOutPacket);
+			this._udpOutPacket = [];
+			this._resetUdpOutIdx = {};
 			
-			this._tcpOutPacket.forEach(action => {
-				this._protocol.encode(this._tcpOut, action);
-			});
-			this._tcpOutPacket = [];
-			
-			this._udpOut.pos = 0;
-			this._udpOut.pushUint16(this._udpOut.size);
-			
-			this._socklist.forEach(socket => {
-				socket.writeUdp(this._udpOut);
-			});
-			
+			const buf = this._udpOut.toBuffer();
+			this._socklist.forEach(socket => socket.writeUdpRaw(buf));
 			this._udpOut.flush();
-			this._udpOut.pushUint16(0);
 			
 		}
 		
@@ -233,10 +226,10 @@ class MpAct extends EventEmitter {
 	
 	_readPacket(binary) {
 		
-		binary.pos = 0;
+		binary.pos = 2;
 		const actionNum = binary.pullUint16();
 		const actions = new Array(actionNum);
-		
+		console.log('ACNUMR', actionNum);
 		for (let i = 0; i < actionNum; i++) {
 			actions[i] = this._protocol.decode(binary);
 		}
@@ -248,11 +241,13 @@ class MpAct extends EventEmitter {
 	
 	_writePacket(binary, actions) {
 		
-		binary.pushUint16(actions.length);
+		binary.pos = 2;
 		
-		actions.forEach(action => {
-			this._protocol.encode(binary, action);
-		});
+		binary.pushUint16(actions.length);
+		actions.forEach(action => this._protocol.encode(binary, action));
+		
+		binary.pos = 0;
+		binary.pushUint16(binary.size);
 		
 	}
 	

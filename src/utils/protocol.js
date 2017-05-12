@@ -34,7 +34,6 @@ class Protocol {
 				type    : type,
 				reliable: opts.actions[type].reliable && true || false,
 				client  : opts.actions[type].client   && true || false,
-				reset   : opts.actions[type].reset    && true || false,
 			};
 		});
 		
@@ -44,7 +43,6 @@ class Protocol {
 			type    : '__SVC',
 			reliable: true,
 			client  : false,
-			reset   : false,
 		});
 		
 		const hash = crypto.createHash('sha256');
@@ -53,7 +51,7 @@ class Protocol {
 		
 		this.isClient   = {};
 		this.isReliable = {};
-		this.isReset    = {};
+		this.hashers    = {};
 		
 		this._index    = {};
 		this._encoders = {};
@@ -63,11 +61,11 @@ class Protocol {
 			
 			this.isReliable[action.type] = action.reliable;
 			this.isClient[action.type]   = action.client;
-			this.isReset[action.type]    = action.reset;
 			this._index[action.type]     = action.index;
 			
 			this._encoders[action.type] = opts.actions[action.type] && opts.actions[action.type].encode || this.encodeDefault;
 			this._decoders[action.type] = opts.actions[action.type] && opts.actions[action.type].decode || this.decodeDefault;
+			this.hashers[action.type]   = opts.actions[action.type] && opts.actions[action.type].hash;
 			
 		});
 		
@@ -94,7 +92,7 @@ class Protocol {
 	 */
 	decodeDefault(binary) {
 		
-		const str = binary.readString();
+		const str = binary.pullString();
 		
 		let data;
 		try {
@@ -141,8 +139,9 @@ class Protocol {
 	
 	
 	encode(binary, action) {
-		
+		// console.log('ENCACT', action);
 		binary[this._pushIndex](this._index[action.type]);
+		
 		this._encoders[action.type](binary, action.data);
 		
 	}
@@ -152,6 +151,7 @@ class Protocol {
 		
 		const index = binary[this._pullIndex]();
 		const type = this._actionKeys[index];
+		// console.log('DECACT', type);
 		const data = this._decoders[type](binary);
 		return { type, data };
 		
