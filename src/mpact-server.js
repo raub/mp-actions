@@ -26,7 +26,7 @@ class Server extends MpAct {
 		this._greetBinary.pushString(this.protocol.version);
 		this._greetBinary.pos = 0;
 		this._greetBinary.pushUint16(this._greetBinary.size);
-		console.log('GREETSIZE', this._greetBinary.size, this._greetBinary.toBuffer());
+		// console.log('GREETSIZE', this._greetBinary.size, this._greetBinary.toBuffer());
 		
 		// Prepare a binary buffer for socket ids
 		this._idBinary = new Binary();
@@ -40,11 +40,11 @@ class Server extends MpAct {
 		this._echo = dgram.createSocket({type:'udp4', reuseAddr: true});
 		this._echo.on('message', (data, remote) => {
 			
-			console.log('SV GOT ECHO:', data.toString());
+			// console.log('SV GOT ECHO:', data.toString());
 			
 			// Compare and respond only to the same protocol
 			if (data.toString() === this._pingString) {
-				console.log('SV SEND ECHO', this._echoBuffer.toString());
+				// console.log('SV SEND ECHO', this._echoBuffer.toString());
 				this._echo.send(
 					this._echoBuffer,
 					0,
@@ -80,15 +80,25 @@ class Server extends MpAct {
 	emitActions(binary, socket) {
 		
 		this._readPacket(binary).forEach(action => {
+			console.log('SV GOT ACT', action.type);
+			if (action.type === '__SVC') {
+				// console.log('SV GOT SVC:', action.data);
+				return this._execService(action.data);
+			}
+			
 			// Only "client" actions can be consumed by the server
 			if ( this._protocol.isClient[action.type] ) {
 				action.clid = socket.id;
 				this.emit('action', action);
 			}
+			
 		});
 		
 	}
 	
+	_execService(data) {
+		
+	}
 	
 	// Say hello upon client connection
 	greet(socket) {
@@ -140,11 +150,15 @@ class Server extends MpAct {
 		socket.writeTcp(this._idBinary);
 		
 		super.addSocket(socket);
+		this.emit('join', socket.id);
+		
+		this._tcpOutPacket.push({ type: '__SVC', data: { event: 'join', payload: socket.id } });
 		
 	}
 	
 	
 	remSocket(socket) {
+		this._tcpOutPacket.push({ type: '__SVC', data: { event: 'drop', payload: socket.id } });
 		this._freeId(socket.id);
 		super.remSocket(socket);
 	}

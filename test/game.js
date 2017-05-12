@@ -88,7 +88,6 @@ class Game extends EventEmitter {
 		switch(action.type) {
 			
 			case 'ADD_PLAYER':
-				console.log('\n\n\nADP');
 				// TODO: make a class maybe? or even two...
 				const player = {
 					id: action.data,
@@ -107,7 +106,6 @@ class Game extends EventEmitter {
 						if (player.control.quit) {
 							this.emit('quit');
 						}
-						console.log('CLC');
 						this.apply({ type: 'CL_CONTROL', data: player.control.toArray() });
 					};
 				}
@@ -124,14 +122,15 @@ class Game extends EventEmitter {
 				
 			// Controls data FROM client - resent by server
 			case 'CL_CONTROL':
-				
+				console.log('CLC', action);
 				if (action.clid !== undefined) {
 					// Serverside: transmit to all other clients
 					// this.apply({ type: 'SV_CONTROL', data: { id: action.clid, control: action.data } });
+					console.log('GOT CTL FOR', action.clid, action.data);
 					this.state.players[action.clid].control.fromArray(action.data);
 				} else {
 					// Clientside: apply immediately
-					console.log('this.state.id', this.state.id);
+					// console.log('this.state.id', this.state.id);
 					this.state.players[this.state.id].control.fromArray(action.data);
 				}
 				

@@ -25,6 +25,10 @@ module.exports = new mpact.Protocol({
 		
 		SV_CONTROL: {
 			
+			hash(action) {
+				return action.type + action.data.id;
+			},
+			
 			encode(binary, data) {
 				binary.pushUint8(data.id);
 				binary.pushBits(data.control);

@@ -51,22 +51,22 @@ class DuoSocket extends EventEmitter {
 			this._pending = this._receivedTcp.pullUint16();
 			this._receivedTcp.pos = this._receivedTcp.size;
 			
-			console.log(this.name, 'PEND', this._pending, 'of', this._receivedTcp.size);
+			// console.log(this.name, 'PEND', this._pending, 'of', this._receivedTcp.size);
 			
 		}
 		
-		console.log(this.name, 'CHECK', this._pending, 'of', this._receivedTcp.size);
+		// console.log(this.name, 'CHECK', this._pending, 'of', this._receivedTcp.size);
 		while (this._pending > 0 && this._pending <= this._receivedTcp.size) {
 			
-			console.log(this.name, 'PACK', this._pending);
+			// console.log(this.name, 'PACK', this._pending);
 			this.emit('packet', this._receivedTcp, this);
 			this._receivedTcp.flush(this._pending);
 			
-			console.log(this.name, 'LOOKAT', this._receivedTcp.size);
+			// console.log(this.name, 'LOOKAT', this._receivedTcp.size);
 			if (this._receivedTcp.size > 1) {
 				this._pending = this._receivedTcp.pullUint16();
 			} else {
-				console.log(this.name, 'NEXT', this._receivedTcp.size);
+				// console.log(this.name, 'NEXT', this._receivedTcp.size);
 				this._receivedTcp.pos = this._receivedTcp.size;
 				this._pending = 0;
 			}

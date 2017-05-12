@@ -59,12 +59,16 @@ class MpAct extends EventEmitter {
 	
 	dispatch(action) {
 		
+		if (action.type === '__SVC') {
+			return console.warn('Application is forbidden to send __SVC!');
+		}
+		
 		const hash = this._protocol.hashers[action.type] && this._protocol.hashers[action.type](action);
 		
 		if (this._protocol.isReliable[action.type]) {
 			
 			if (hash) {
-				if (this._resetTcpOutIdx[hash]) {
+				if (this._resetTcpOutIdx[hash] !== undefined) {
 					this._tcpOutPacket[this._resetTcpOutIdx[hash]] = action;
 				} else {
 					this._resetTcpOutIdx[hash] = this._tcpOutPacket.length;
@@ -77,7 +81,8 @@ class MpAct extends EventEmitter {
 		} else {
 			
 			if (hash) {
-				if (this._resetUdpOutIdx[hash]) {
+				// console.log('HASH', hash, this._resetUdpOutIdx, this._resetUdpOutIdx[hash]);
+				if (this._resetUdpOutIdx[hash] !== undefined) {
 					// console.log('-SET', action, this._resetUdpOutIdx[hash], this._udpOutPacket[0]);
 					this._udpOutPacket[this._resetUdpOutIdx[hash]] = action;
 					// console.log('+SET', action, this._resetUdpOutIdx[hash], this._udpOutPacket[0]);
@@ -120,8 +125,6 @@ class MpAct extends EventEmitter {
 		
 		this._socklist.push(socket);
 		this._sockets[socket.name] = socket;
-		
-		this.emit('join', socket.id);
 		
 		socket.on('packet', this.emitActions.bind(this));
 		
@@ -191,7 +194,7 @@ class MpAct extends EventEmitter {
 	_sendFrame() {
 		
 		if (this._tcpOutPacket.length > 0) {
-			console.log('this._tcpOutPacket', this._tcpOutPacket);
+			console.log(this.constructor, '#TCP', this._tcpOutPacket);
 			this._writePacket(this._tcpOut, this._tcpOutPacket);
 			this._tcpOutPacket = [];
 			this._resetTcpOutIdx = {};
@@ -203,7 +206,7 @@ class MpAct extends EventEmitter {
 		}
 		
 		if (this._udpOutPacket.length > 0) {
-			console.log('this._udpOutPacket', this._udpOutPacket[0]);
+			console.log(this.constructor, '#UDP', this._udpOutPacket);
 			this._writePacket(this._udpOut, this._udpOutPacket);
 			this._udpOutPacket = [];
 			this._resetUdpOutIdx = {};
@@ -229,7 +232,7 @@ class MpAct extends EventEmitter {
 		binary.pos = 2;
 		const actionNum = binary.pullUint16();
 		const actions = new Array(actionNum);
-		console.log('ACNUMR', actionNum);
+		// console.log('ACNUMR', actionNum);
 		for (let i = 0; i < actionNum; i++) {
 			actions[i] = this._protocol.decode(binary);
 		}

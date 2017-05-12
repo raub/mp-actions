@@ -117,9 +117,9 @@ class Protocol {
 		try {
 			str = JSON.stringify([data]);
 		} catch (err) {
-			return binary.writeString('[null]');
+			return binary.pushString('[null]');
 		}
-		binary.writeString(str);
+		binary.pushString(str);
 		
 	}
 	

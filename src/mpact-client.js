@@ -54,10 +54,10 @@ class Client extends MpAct {
 		
 		this._echo.on('message', (data, remote) => {
 			
-			console.log('CL GOT ECHO:', this._echoActive, data.toString());
+			// console.log('CL GOT ECHO:', this._echoActive, data.toString());
 			
 			if ( ! this._echoActive ) {
-				console.log('ECHO ALREADY INACTIVE!');
+				console.warn('ECHO ALREADY INACTIVE!');
 				return;
 			}
 			
@@ -115,16 +115,16 @@ class Client extends MpAct {
 	
 	handshake(binary, socket) {
 		
-		console.log('CL GOT HANDSHAKE:', socket.name, binary.size, binary.toBuffer());
+		// console.log('CL GOT HANDSHAKE:', socket.name, binary.size, binary.toBuffer());
 		
 		binary.pos = 2;
 		const version = binary.pullString();
 		
-		console.log('CL VPULLED', version);
+		// console.log('CL VPULLED', version);
 		
 		// Version check
 		if (version === this.protocol.version) {
-			console.log('CL HANDSHAKE OK');
+			// console.log('CL HANDSHAKE OK');
 			socket.writeTcp(this._respondBinary);
 			
 			// Next packet should contain an ID
@@ -133,7 +133,7 @@ class Client extends MpAct {
 				binary.pos = 2;
 				socket.id = binary.pullUint8();
 				this._id = socket.id;
-				console.log('CLIENT GOT ID:', socket.id);
+				// console.log('CLIENT GOT ID:', socket.id);
 				this.addSocket(socket);
 				
 				this._cb();
@@ -156,6 +156,46 @@ class Client extends MpAct {
 		this._port   = null;
 		super.close(cb);
 	}
+	
+	
+	// Actions that came from the network
+	emitActions(binary, socket) {
+		
+		this._readPacket(binary).forEach(action => {
+			
+			if (action.type === '__SVC') {
+				// console.log('CL GOT SVC:', action.data);
+				return this._execService(action.data);
+			}
+			
+			// Only "server" actions can be consumed by the server
+			if ( ! this._protocol.isClient[action.type] ) {
+				this.emit('action', action);
+			}
+		});
+		
+	}
+	
+	
+	_execService(data) {
+		if (data.event === 'join') {
+			this.emit('join', data.payload);
+		} else if (data.event === 'drop') {
+			this.emit('drop', data.payload);
+		}
+	}
+	
+	
+	// Propagate an action through the network
+	dispatch(action) {
+		
+		// Only client actions are allowed to be sent by the server
+		if ( this._protocol.isClient[action.type]) {
+			super.dispatch(action);
+		}
+		
+	}
+	
 	
 	_stopEcho() {
 		
@@ -190,7 +230,7 @@ class Client extends MpAct {
 		this._echoActive = true;
 		this._echoPrev = Date.now();
 		
-		console.log('CL SEND ECHO:', this._echoBuffer.toString());
+		// console.log('CL SEND ECHO:', this._echoBuffer.toString());
 		this._echo.send(this._echoBuffer, 0, this._echoBuffer.length, this._echoPort, '255.255.255.255');
 		
 		this._echoTotalTimer = setTimeout(this._stopEcho.bind(this), this._echoTotal);
