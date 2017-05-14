@@ -56,7 +56,7 @@ class Game extends EventEmitter {
 		this.state.plist.forEach(player => {
 			const vx = dt * ( (player.control.right?1:0) - (player.control.left?1:0) );
 			this.apply({ type: 'SV_X', data: { x: player.x + vx, id: player.id } });
-			this.apply({ type: 'SV_CONTROL', data: { id: player.id, control: player.control } });
+			this.apply({ type: 'SV_CONTROL', data: { id: player.id, control: player.control.toArray() } });
 		});
 		
 	}
@@ -70,16 +70,16 @@ class Game extends EventEmitter {
 	
 	
 	// For join event
-	join(id) {
-		console.log('JOINED:', id);
-		this.dispatch({ type: 'ADD_PLAYER', data: id });
+	join(user) {
+		console.log('JOINED:', user);
+		this.dispatch({ type: 'ADD_PLAYER', data: user });
 	}
 	
 	
 	// For drop event
-	drop(id) {
-		console.log('DROPED:', id);
-		this.dispatch({ type: 'REM_PLAYER', data: id });
+	drop(user) {
+		console.log('DROPED:', user);
+		this.dispatch({ type: 'REM_PLAYER', data: user });
 	}
 	
 	// Action processor
@@ -88,19 +88,21 @@ class Game extends EventEmitter {
 		switch(action.type) {
 			
 			case 'ADD_PLAYER':
+			console.log('ADDP', action);
 				// TODO: make a class maybe? or even two...
 				const player = {
-					id: action.data,
+					id: action.data.id,
+					user: action.data,
 					x : 0,
 					y : 0,
 					settings: {},
 					control : new Control(),
 				};
 				
-				this.state.players[action.data] = player;
+				this.state.players[action.data.id] = player;
 				this.state.plist.push(player);
 				
-				if (this.state.id === action.data) {
+				if (this.state.id === player.id) {
 					this._updatePlayer = function () {
 						player.control.fetch();
 						if (player.control.quit) {
@@ -113,20 +115,19 @@ class Game extends EventEmitter {
 				break;
 				
 			case 'REM_PLAYER':
-				delete this.state.players[action.data];
-				this.state.plist = this.state.playerlist.filter(p => p.id !== action.data);
-				if (this.state.id === action.data) {
+				delete this.state.players[action.data.id];
+				this.state.plist = this.state.playerlist.filter(p => p.id !== action.data.id);
+				if (this.state.id === action.data.id) {
 					this._updatePlayer = ()=>{};
 				}
 				break;
 				
 			// Controls data FROM client - resent by server
 			case 'CL_CONTROL':
-				console.log('CLC', action);
 				if (action.clid !== undefined) {
 					// Serverside: transmit to all other clients
 					// this.apply({ type: 'SV_CONTROL', data: { id: action.clid, control: action.data } });
-					console.log('GOT CTL FOR', action.clid, action.data);
+					console.log('SV GOT CTL FOR', action.clid, action.data);
 					this.state.players[action.clid].control.fromArray(action.data);
 				} else {
 					// Clientside: apply immediately
@@ -146,6 +147,7 @@ class Game extends EventEmitter {
 				break;
 				
 			case 'SV_X':
+			console.log('1',action.data, action.clid, this.state.players);
 				this.state.players[action.data.id].x = action.data.x;
 				this.state.players[action.data.id].y = Math.sin(action.data.x);
 				break;

@@ -34,6 +34,17 @@ class DuoSocket extends EventEmitter {
 		
 		this._tcp.on('data', this._accumulate.bind(this));
 		
+		this._time = 0;
+		
+	}
+	
+	
+	timeCAS(newTime) {
+		if (newTime > this._time || this._time - newTime > 0x0FFF) {
+			this._time = newTime;
+			return true;
+		}
+		return false;
 	}
 	
 	
@@ -120,6 +131,7 @@ class DuoSocket extends EventEmitter {
 	
 	writeUdpRaw(buffer) {
 		// console.log('1',this._udp);
+		console.log(this.name, 'UDP SENT:', buffer.length, this._tcp.remotePort + 1, this._tcp.remoteAddress);
 		this._udp.send(buffer, 0, buffer.length, this._tcp.remotePort + 1, this._tcp.remoteAddress);
 		
 	}

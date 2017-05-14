@@ -63,8 +63,8 @@ async.series(
 	[
 		cb => createServer(cb),
 		cb => joinServer(cb),
-		// cb => joinServer(cb),
-		// cb => joinServer(cb),
+		cb => joinServer(cb),
+		cb => joinServer(cb),
 	],
 	
 	err => {

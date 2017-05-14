@@ -3,22 +3,37 @@
 const EventEmitter = require('events');
 const dgram = require('dgram');
 
-const Binary    = require('./utils/binary');
-const DuoSocket = require('./utils/duo-socket');
+const Binary    = require('./binary');
+const DuoSocket = require('./duo-socket');
+const Protocol  = require('./protocol');
+const User      = require('./user');
 
 
 /**
- * Mpact networking entity
- * @note This class is not for use on it's own
+ * Network channel
  * @author Luis Blanco
  * @extends EventEmitter
  */
-class MpAct extends EventEmitter {
+class Channel extends EventEmitter {
 	
 	
 	/**
-	 * @constructs MpAct
-	 * @desc Constructs MpAct, with some optional parameters.
+	 * Network entity state
+	 * @return {Boolean} network entity state
+	 */
+	get isOpen() { return this._isOpen; }
+	
+	
+	/**
+	 * Network protocol identity
+	 * @return {Protocol} network protocol identity
+	 */
+	get protocol() { return this._protocol; }
+	
+	
+	/**
+	 * @constructs Channel
+	 * @desc Constructs Channel, with some optional parameters.
 	 * @arg {Protocol} protocol The network identity
 	 * @return {MpAct} instance
 	 */
@@ -27,9 +42,8 @@ class MpAct extends EventEmitter {
 		super();
 		
 		this._isOpen   = false;
-		this._protocol = protocol;
+		this._protocol = new Protocol(protocol);
 		
-		this._protocol = protocol;
 		this._socklist = [];
 		this._sockets  = {};
 		
@@ -46,14 +60,16 @@ class MpAct extends EventEmitter {
 		this._udp = dgram.createSocket({type:'udp4'/*, reuseAddr: true*/});
 		this._udp.on('message', this._receiveUdp.bind(this));
 		
+		this._ulist = [];
+		this._users = {};
+		
 	}
 	
 	
-	_receiveUdp(data, remote) {
-		const socket = this._sockets[remote.address + ':' + (remote.port + 1)];
-		if (socket) {
-			socket.receiveUdp(data);
-		}
+	emitActions(binary, socket) {
+		this._readPacket(binary, socket).forEach(action => {
+			this.emit('action', action);
+		});
 	}
 	
 	
@@ -101,6 +117,12 @@ class MpAct extends EventEmitter {
 	}
 	
 	
+	handshake() { throw new Error('MpAct::handshake(socket, binary) is pure virtual.'); }
+	getTime() {
+		return Date.now() & 0xFFFF;
+	}
+	
+	
 	initSocket(tcp) {
 		
 		const socket = new DuoSocket(tcp, this._udp);
@@ -108,16 +130,9 @@ class MpAct extends EventEmitter {
 		
 		// Listen to handshake
 		socket.once('packet', this.handshake.bind(this));
-		this.greet(socket);
 		
-	}
-	
-	
-	greet() {}
-	
-	
-	handshake(binary, socket) {
-		throw new Error('MpAct::handshake(socket, binary) is pure virtual.');
+		return socket;
+		
 	}
 	
 	
@@ -132,7 +147,7 @@ class MpAct extends EventEmitter {
 		socket.on('end', () => {
 			console.log('SOCKET ENDED:', socket.name);
 			this.emit('drop', socket.id);
-			remSocket(socket);
+			this.remSocket(socket);
 		});
 		
 	}
@@ -140,8 +155,30 @@ class MpAct extends EventEmitter {
 	
 	remSocket(socket) {
 		this._freeId(socket.id);
-		this._clist.splice(this._clients.indexOf(socket), 1);
-		delete this._clients[socket.name];
+		this._socklist.splice(this._socklist.indexOf(socket), 1);
+		delete this._sockets[socket.name];
+	}
+	
+	
+	initUser(id) {
+		
+		const user = new User(id);
+		console.log('GOT NEW USER:', user.id);
+		return user;
+		
+	}
+	
+	addUser(user) {
+		
+		this._ulist.push(user);
+		this._users[user.id] = user;
+		
+	}
+	
+	
+	remUser(user) {
+		this._ulist.splice(this._ulist.indexOf(user), 1);
+		delete this._users[user.id];
 	}
 	
 	
@@ -176,25 +213,11 @@ class MpAct extends EventEmitter {
 		cb();
 	}
 	
-	/**
-	 * Network entity state
-	 * @return {Boolean} network entity state
-	 */
-	get isOpen() { return this._isOpen; }
-	
-	
-	/**
-	 * Network protocol identity
-	 * @return {Protocol} network protocol identity
-	 */
-	get protocol() { return this._protocol; }
-	
-	
 	
 	_sendFrame() {
 		
 		if (this._tcpOutPacket.length > 0) {
-			console.log(this.constructor, '#TCP', this._tcpOutPacket);
+			// console.log(this.constructor, '#TCP', this._tcpOutPacket);
 			this._writePacket(this._tcpOut, this._tcpOutPacket);
 			this._tcpOutPacket = [];
 			this._resetTcpOutIdx = {};
@@ -206,7 +229,7 @@ class MpAct extends EventEmitter {
 		}
 		
 		if (this._udpOutPacket.length > 0) {
-			console.log(this.constructor, '#UDP', this._udpOutPacket);
+			// console.log(this.constructor, '#UDP', this._udpOutPacket);
 			this._writePacket(this._udpOut, this._udpOutPacket);
 			this._udpOutPacket = [];
 			this._resetUdpOutIdx = {};
@@ -220,19 +243,30 @@ class MpAct extends EventEmitter {
 	}
 	
 	
-	emitActions(binary) {
-		this._readPacket(binary).forEach(action => {
-			this.emit('action', action);
-		});
+	_receiveUdp(data, remote) {
+		// console.log('UDP!', remote.address + ':' + (remote.port - 1));
+		const socket = this._sockets[remote.address + ':' + (remote.port - 1)];
+		if (socket) {
+			socket.receiveUdp(data);
+		}
 	}
 	
 	
-	_readPacket(binary) {
+	_readPacket(binary, socket) {
 		
 		binary.pos = 2;
+		
+		// // Prevent obsolete packets
+		// const time = binary.pullUint16();
+		// console.log('GOT time', time);
+		// if ( ! socket.timeCAS(time) ) {
+		// 	console.log('BAD time');
+		// 	return [];
+		// }
+		
 		const actionNum = binary.pullUint16();
 		const actions = new Array(actionNum);
-		// console.log('ACNUMR', actionNum);
+		
 		for (let i = 0; i < actionNum; i++) {
 			actions[i] = this._protocol.decode(binary);
 		}
@@ -246,6 +280,10 @@ class MpAct extends EventEmitter {
 		
 		binary.pos = 2;
 		
+		// const time = this.getTime();
+		// console.log('SEND time', time);
+		// binary.pushUint16(time);
+		
 		binary.pushUint16(actions.length);
 		actions.forEach(action => this._protocol.encode(binary, action));
 		
@@ -258,4 +296,4 @@ class MpAct extends EventEmitter {
 }
 
 
-module.exports = MpAct;
+module.exports = Channel;

@@ -4,8 +4,8 @@
 const dgram = require('dgram');
 const net   = require('net');
 
-const Binary = require('./utils/binary');
-const MpAct  = require('./mpact');
+const Channel  = require('./lib/channel');
+const Binary = require('./lib/binary');
 
 
 /**
@@ -13,7 +13,7 @@ const MpAct  = require('./mpact');
  * @author Luis Blanco
  * @extends MpAct
  */
-class Client extends MpAct {
+class Client extends Channel {
 	
 	get id() { return this._id; }
 	
@@ -81,6 +81,8 @@ class Client extends MpAct {
 		this._echo.bind();
 		this._echo.on('listening', () => this._echo.setBroadcast(true));
 		
+		this._time = null;
+		
 	}
 	
 	open(opts, cb) {
@@ -128,11 +130,14 @@ class Client extends MpAct {
 			socket.writeTcp(this._respondBinary);
 			
 			// Next packet should contain an ID
-			socket.on('packet', binary => {
+			socket.once('packet', binary => {
 				
 				binary.pos = 2;
 				socket.id = binary.pullUint8();
 				this._id = socket.id;
+				
+				this._time = binary.pullUint16();
+				
 				// console.log('CLIENT GOT ID:', socket.id);
 				this.addSocket(socket);
 				
@@ -149,6 +154,11 @@ class Client extends MpAct {
 	}
 	
 	
+	getTime() {
+		return Date.now() & 0xFFFF;
+	}
+	
+	
 	close(cb) {
 		this._cb = ()=>{};
 		this._remote = null;
@@ -161,7 +171,7 @@ class Client extends MpAct {
 	// Actions that came from the network
 	emitActions(binary, socket) {
 		
-		this._readPacket(binary).forEach(action => {
+		this._readPacket(binary, socket).forEach(action => {
 			
 			if (action.type === '__SVC') {
 				// console.log('CL GOT SVC:', action.data);
@@ -178,11 +188,71 @@ class Client extends MpAct {
 	
 	
 	_execService(data) {
-		if (data.event === 'join') {
-			this.emit('join', data.payload);
-		} else if (data.event === 'drop') {
-			this.emit('drop', data.payload);
+		
+		switch(data.e) {
+			
+			case 'join':
+				const joined = this.initUser(data.i);
+				this.addUser(joined);
+				this.emit('join', joined);
+				break;
+				
+			case 'drop':
+				const dropped = this._users[data.i];
+				this.remUser(dropped);
+				this.emit('drop', dropped);
+				break;
+				
+			case 'ping':
+			console.log('GOT PINGS',data);
+				
+				// Apply
+				this._time = data.t;
+				
+				const exist = {};
+				
+				data.p.forEach(p => {
+					
+					const user = this._users[p.i];
+					
+					if (user) {
+						// If user exists, then set his ping
+						user.ping = p.p;
+					} else {
+						console.log('NEW USER', p);
+						// Else create a new one
+						const joined = this.initUser(p.i);
+						this.addUser(joined);
+						this.emit('join', joined);
+					}
+					
+					exist[user.id] = true;
+					
+				});
+				
+				this._ulist.slice().forEach(u => {
+					if ( ! exist[u.id] ) {
+						console.log('REM USER', u);
+						// Else create a new one
+						this.remUser(u);
+						this.emit('drop', u);
+					}
+				});
+				
+				// Respond
+				this._udpOutPacket.push({
+					type: '__SVC',
+					data: {
+						e: 'pong',
+						t: this._time,
+					},
+				});
+				break;
+				
+			default: break;
+			
 		}
+		
 	}
 	
 	

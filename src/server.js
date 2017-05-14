@@ -4,16 +4,16 @@ const async = require('async');
 const dgram = require('dgram');
 const net   = require('net');
 
-const MpAct  = require('./mpact');
-const Binary = require('./utils/binary');
+const Channel  = require('./lib/channel');
+const Binary = require('./lib/binary');
 
 
 /**
  * Network server
  * @author Luis Blanco
- * @extends MpAct
+ * @extends Channel
  */
-class Server extends MpAct {
+class Server extends Channel {
 	
 	
 	constructor(protocol) {
@@ -79,11 +79,11 @@ class Server extends MpAct {
 	// Actions that came from the network
 	emitActions(binary, socket) {
 		
-		this._readPacket(binary).forEach(action => {
-			console.log('SV GOT ACT', action.type);
+		this._readPacket(binary, socket).forEach(action => {
+			
 			if (action.type === '__SVC') {
 				// console.log('SV GOT SVC:', action.data);
-				return this._execService(action.data);
+				return this._execService(action.data, socket);
 			}
 			
 			// Only "client" actions can be consumed by the server
@@ -96,12 +96,20 @@ class Server extends MpAct {
 		
 	}
 	
-	_execService(data) {
-		
+	_execService(data, socket) {
+		switch(data.e) {
+			
+			case 'pong':
+				this._users[socket.id].ping = Math.min(0, Math.max(999, Date.now() - data.t));
+				break;
+				
+			default: break;
+			
+		}
 	}
 	
 	// Say hello upon client connection
-	greet(socket) {
+	_greet(socket) {
 		socket.writeTcp(this._greetBinary);
 	}
 	
@@ -125,6 +133,11 @@ class Server extends MpAct {
 	}
 	
 	
+	getTime() {
+		return Date.now() & 0xFFFF;
+	}
+	
+	
 	_nextId() {
 		return this._ids.shift();
 	}
@@ -134,6 +147,14 @@ class Server extends MpAct {
 		this._ids.push(id);
 	}
 	
+	
+	
+	initSocket(tcp) {
+		
+		const socket = super.initSocket(tcp);
+		socket.writeTcp(this._greetBinary);
+		
+	}
 	
 	addSocket(socket) {
 		
@@ -150,15 +171,25 @@ class Server extends MpAct {
 		socket.writeTcp(this._idBinary);
 		
 		super.addSocket(socket);
-		this.emit('join', socket.id);
 		
-		this._tcpOutPacket.push({ type: '__SVC', data: { event: 'join', payload: socket.id } });
+		const user = this.initUser(socket.id);
+		this.addUser(user);
+		this.emit('join', user);
+		
+		this._sendPings();
+		// this._tcpOutPacket.push({ type: '__SVC', data: { e: 'join', i: user.id } });
 		
 	}
 	
 	
 	remSocket(socket) {
-		this._tcpOutPacket.push({ type: '__SVC', data: { event: 'drop', payload: socket.id } });
+		
+		const user = this._ulist[socket.id];
+		
+		// this._tcpOutPacket.push({ type: '__SVC', data: { e: 'drop', i: user.id } });
+		this.remUser(user);
+		this._sendPings();
+		
 		this._freeId(socket.id);
 		super.remSocket(socket);
 	}
@@ -180,14 +211,32 @@ class Server extends MpAct {
 		async.parallel(
 			[
 				cb => this._server.listen(this._address, () => cb()),
-				cb => this._echo.on('listening', () => cb()),
+				cb => this._echo.bind({ host:'0.0.0.0', port: this._echoPort, exclusive: false }, cb),
 				cb => super.open(opts, cb),
 			],
-			cb
+			err => {
+				if (err) {
+					cb(err);
+				}
+				
+				this._pingTimer = setInterval(this._sendPings.bind(this), 200);
+				
+				cb();
+			}
 		);
 		
-		this._echo.bind({ host:'0.0.0.0', port: this._echoPort, exclusive: false });
-		
+	}
+	
+	
+	_sendPings() {
+		this._udpOutPacket.push({
+			type: '__SVC',
+			data: {
+				e: 'ping',
+				t: Date.now(),
+				p: this._ulist.map( u=>({i:u.id, p:u.ping}) ),
+			},
+		});
 	}
 	
 	

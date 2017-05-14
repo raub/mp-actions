@@ -53,7 +53,9 @@ class Binary {
 		for (let step = 0, i = 0; step < steps; step++) {
 			let byte = 0;
 			for (let bit = 0; bit < 8 && i < len; bit++, i++) {
-				byte |= (1 << bit) & (value[i] ? 1 : 0);
+				
+				byte |= (1 << bit) & (value[i] ? 0xFF : 0);
+				
 			}
 			this.pushUint8(byte);
 		}
@@ -109,15 +111,15 @@ class Binary {
 	
 	pullBits() {
 		
-		const value = [];
 		const len = this.pullUint8();
+		const value = new Array(len);
 		
 		const steps = Math.ceil(len / 8);
 		
 		for (let step = 0, i = 0; step < steps; step++) {
 			let byte = this.pullUint8();
 			for (let bit = 0; bit < 8 && i < len; bit++, i++) {
-				value[i] = (1 << bit) & byte;
+				value[i] = ((1 << bit) & byte) >> bit;
 			}
 		}
 		

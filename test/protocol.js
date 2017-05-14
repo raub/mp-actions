@@ -1,8 +1,7 @@
 'use strict';
 
-const mpact = require('../.');
 
-module.exports = new mpact.Protocol({
+module.exports = {
 	
 	version: '1.0',
 	
@@ -30,6 +29,7 @@ module.exports = new mpact.Protocol({
 			},
 			
 			encode(binary, data) {
+				// console.log('data', data);
 				binary.pushUint8(data.id);
 				binary.pushBits(data.control);
 			},
@@ -91,4 +91,4 @@ module.exports = new mpact.Protocol({
 		
 	},
 	
-});
+};
