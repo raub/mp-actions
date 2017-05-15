@@ -14,6 +14,7 @@ class DuoSocket extends EventEmitter {
 	
 	
 	get name() { return this._name; }
+	get time() { return this._time; }
 	
 	
 	constructor(tcp, udp) {
@@ -40,7 +41,8 @@ class DuoSocket extends EventEmitter {
 	
 	
 	timeCAS(newTime) {
-		if (newTime > this._time || this._time - newTime > 0x0FFF) {
+		if (newTime >= this._time || this._time - newTime > 0x0FFF) {
+			// console.log('CAS', this._time, '<', newTime);
 			this._time = newTime;
 			return true;
 		}
@@ -69,7 +71,11 @@ class DuoSocket extends EventEmitter {
 		// console.log(this.name, 'CHECK', this._pending, 'of', this._receivedTcp.size);
 		while (this._pending > 0 && this._pending <= this._receivedTcp.size) {
 			
-			// console.log(this.name, 'PACK', this._pending);
+			// console.log(this.name, 'TCP PACK', this._pending);
+			
+			this._receivedTcp.pos = 2;
+			this._receivedTcp.pushUint16(this._time);
+			
 			this.emit('packet', this._receivedTcp, this);
 			this._receivedTcp.flush(this._pending);
 			
@@ -93,7 +99,7 @@ class DuoSocket extends EventEmitter {
 		this._receivedUdp.pos = 0;
 		
 		const pending = this._receivedUdp.pullUint16();
-		
+		// console.log('UDP PACK', pending);
 		if (pending === this._receivedUdp.size) {
 			this.emit('packet', this._receivedUdp, this);
 		} else {
@@ -108,7 +114,7 @@ class DuoSocket extends EventEmitter {
 		
 		const buffer = binary.toBuffer();
 		this._tcp.write(buffer);
-		console.log(this.name, 'TCP SENT:', buffer.length);
+		// console.log(this.name, 'TCP SENT:', buffer.length);
 		
 	}
 	
@@ -124,14 +130,14 @@ class DuoSocket extends EventEmitter {
 	writeTcpRaw(buffer) {
 		
 		this._tcp.write(buffer);
-		console.log(this.name, 'TCP SENT:', buffer.length);
+		// console.log(this.name, 'TCP SENT:', buffer.length);
 		
 	}
 	
 	
 	writeUdpRaw(buffer) {
 		// console.log('1',this._udp);
-		console.log(this.name, 'UDP SENT:', buffer.length, this._tcp.remotePort + 1, this._tcp.remoteAddress);
+		// console.log(this.name, 'UDP SENT:', buffer.length, this._tcp.remotePort + 1, this._tcp.remoteAddress);
 		this._udp.send(buffer, 0, buffer.length, this._tcp.remotePort + 1, this._tcp.remoteAddress);
 		
 	}

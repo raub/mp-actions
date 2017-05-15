@@ -22,7 +22,8 @@ class Server extends Channel {
 		
 		// Prepare a binary buffer with server's greeting
 		this._greetBinary = new Binary();
-		this._greetBinary.pushUint16(0);
+		
+		this._greetBinary.pos = 4;
 		this._greetBinary.pushString(this.protocol.version);
 		this._greetBinary.pos = 0;
 		this._greetBinary.pushUint16(this._greetBinary.size);
@@ -100,7 +101,9 @@ class Server extends Channel {
 		switch(data.e) {
 			
 			case 'pong':
-				this._users[socket.id].ping = Math.min(0, Math.max(999, Date.now() - data.t));
+				// console.log('GOT PONG',socket.id, data);
+				this._users[socket.id].ping = Math.max(0, Math.min(999, Date.now() - data.t));
+				// console.log('SET PING', Date.now(), '-', data.t, '->', this._users[socket.id].ping);
 				break;
 				
 			default: break;
@@ -110,6 +113,8 @@ class Server extends Channel {
 	
 	// Say hello upon client connection
 	_greet(socket) {
+		this._greetBinary.pos = 2;
+		this._greetBinary.pushUint16(this.getTime());
 		socket.writeTcp(this._greetBinary);
 	}
 	
@@ -119,7 +124,7 @@ class Server extends Channel {
 		
 		console.log('SV GOT HANDSHAKE:', socket.name);
 		
-		binary.pos = 2;
+		binary.pos = 4;
 		const identity = binary.pullString();
 		
 		// Check protocol identity
@@ -127,7 +132,7 @@ class Server extends Channel {
 			this.addSocket(socket);
 		} else {
 			console.log('SV CLIENT REJECTED!');
-			socket.destroy();
+			socket.close();
 		}
 		
 	}
@@ -152,7 +157,7 @@ class Server extends Channel {
 	initSocket(tcp) {
 		
 		const socket = super.initSocket(tcp);
-		socket.writeTcp(this._greetBinary);
+		this._greet();
 		
 	}
 	
@@ -161,14 +166,16 @@ class Server extends Channel {
 		socket.id = this._nextId();
 		
 		this._idBinary.flush();
-		this._idBinary.pushUint16(0);
+		this._idBinary.pos = 2;
+		this._idBinary.pushUint16(this.getTime());
 		this._idBinary.pushUint8(socket.id);
 		this._idBinary.pos = 0;
 		this._idBinary.pushUint16(this._idBinary.size);
 		
-		console.log('SERVER GIVE ID:', socket.id);
+		// console.log('SERVER GIVES ID:', socket.id);
 		
 		socket.writeTcp(this._idBinary);
+		// console.log('IDBIN>>');
 		
 		super.addSocket(socket);
 		
@@ -176,7 +183,7 @@ class Server extends Channel {
 		this.addUser(user);
 		this.emit('join', user);
 		
-		this._sendPings();
+		this._sendPings(true);
 		// this._tcpOutPacket.push({ type: '__SVC', data: { e: 'join', i: user.id } });
 		
 	}
@@ -188,7 +195,7 @@ class Server extends Channel {
 		
 		// this._tcpOutPacket.push({ type: '__SVC', data: { e: 'drop', i: user.id } });
 		this.remUser(user);
-		this._sendPings();
+		this._sendPings(true);
 		
 		this._freeId(socket.id);
 		super.remSocket(socket);
@@ -228,8 +235,8 @@ class Server extends Channel {
 	}
 	
 	
-	_sendPings() {
-		this._udpOutPacket.push({
+	_sendPings(reliable) {
+		(reliable ? this._tcpOutPacket : this._udpOutPacket).push({
 			type: '__SVC',
 			data: {
 				e: 'ping',

@@ -151,7 +151,7 @@ class Protocol {
 		
 		const index = binary[this._pullIndex]();
 		const type = this._actionKeys[index];
-		// console.log('DECACT', type);
+		// console.log('DECACT', index, type);
 		const data = this._decoders[type](binary);
 		return { type, data };
 		

@@ -63,6 +63,8 @@ class Channel extends EventEmitter {
 		this._ulist = [];
 		this._users = {};
 		
+		this._frameTime = 5;
+		
 	}
 	
 	
@@ -117,16 +119,14 @@ class Channel extends EventEmitter {
 	}
 	
 	
-	handshake() { throw new Error('MpAct::handshake(socket, binary) is pure virtual.'); }
-	getTime() {
-		return Date.now() & 0xFFFF;
-	}
+	handshake() { throw new Error('Channel::handshake(socket, binary) is pure virtual.'); }
+	getTime() { throw new Error('Channel::getTime() is pure virtual.'); }
 	
 	
 	initSocket(tcp) {
 		
 		const socket = new DuoSocket(tcp, this._udp);
-		console.log('GOT NEW SOCKET:', socket.name);
+		// console.log('GOT NEW SOCKET:', socket.name);
 		
 		// Listen to handshake
 		socket.once('packet', this.handshake.bind(this));
@@ -189,7 +189,7 @@ class Channel extends EventEmitter {
 	open(opts, cb) {
 		
 		this._isOpen = true;
-		this._frameTimer = setInterval(this._sendFrame.bind(this), 20);
+		this._frameTimer = setInterval(this._sendFrame.bind(this), this._frameTime);
 		
 		const udpAddress = {
 			host: '0.0.0.0',
@@ -217,7 +217,9 @@ class Channel extends EventEmitter {
 	_sendFrame() {
 		
 		if (this._tcpOutPacket.length > 0) {
+			
 			// console.log(this.constructor, '#TCP', this._tcpOutPacket);
+			
 			this._writePacket(this._tcpOut, this._tcpOutPacket);
 			this._tcpOutPacket = [];
 			this._resetTcpOutIdx = {};
@@ -229,7 +231,9 @@ class Channel extends EventEmitter {
 		}
 		
 		if (this._udpOutPacket.length > 0) {
+			
 			// console.log(this.constructor, '#UDP', this._udpOutPacket);
+			
 			this._writePacket(this._udpOut, this._udpOutPacket);
 			this._udpOutPacket = [];
 			this._resetUdpOutIdx = {};
@@ -256,17 +260,17 @@ class Channel extends EventEmitter {
 		
 		binary.pos = 2;
 		
-		// // Prevent obsolete packets
-		// const time = binary.pullUint16();
+		// Prevent obsolete packets
+		const time = binary.pullUint16();
 		// console.log('GOT time', time);
-		// if ( ! socket.timeCAS(time) ) {
-		// 	console.log('BAD time');
-		// 	return [];
-		// }
+		if ( ! socket.timeCAS(time) ) {
+			console.log('BAD time');
+			return [];
+		}
 		
 		const actionNum = binary.pullUint16();
 		const actions = new Array(actionNum);
-		
+		// console.log('ACN <-', binary.size, actionNum);
 		for (let i = 0; i < actionNum; i++) {
 			actions[i] = this._protocol.decode(binary);
 		}
@@ -280,15 +284,17 @@ class Channel extends EventEmitter {
 		
 		binary.pos = 2;
 		
-		// const time = this.getTime();
+		const time = this.getTime();
 		// console.log('SEND time', time);
-		// binary.pushUint16(time);
+		binary.pushUint16(time);
 		
 		binary.pushUint16(actions.length);
 		actions.forEach(action => this._protocol.encode(binary, action));
 		
 		binary.pos = 0;
 		binary.pushUint16(binary.size);
+		
+		// console.log('ACN ->', binary.size, actions.length);
 		
 	}
 	

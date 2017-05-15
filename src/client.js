@@ -30,7 +30,7 @@ class Client extends Channel {
 		
 		// Prepare a binary buffer with client's identity
 		this._respondBinary = new Binary();
-		this._respondBinary.pushUint16(0);
+		this._respondBinary.pos = 4;
 		this._respondBinary.pushString(this.protocol.identity);
 		this._respondBinary.pos = 0;
 		this._respondBinary.pushUint16(this._respondBinary.size);
@@ -120,6 +120,7 @@ class Client extends Channel {
 		// console.log('CL GOT HANDSHAKE:', socket.name, binary.size, binary.toBuffer());
 		
 		binary.pos = 2;
+		this._time = binary.pullUint16();
 		const version = binary.pullString();
 		
 		// console.log('CL VPULLED', version);
@@ -127,16 +128,17 @@ class Client extends Channel {
 		// Version check
 		if (version === this.protocol.version) {
 			// console.log('CL HANDSHAKE OK');
+			this._respondBinary.pos = 2;
+			this._respondBinary.pushUint16(this.getTime());
 			socket.writeTcp(this._respondBinary);
 			
 			// Next packet should contain an ID
 			socket.once('packet', binary => {
 				
 				binary.pos = 2;
+				this._time = binary.pullUint16();
 				socket.id = binary.pullUint8();
 				this._id = socket.id;
-				
-				this._time = binary.pullUint16();
 				
 				// console.log('CLIENT GOT ID:', socket.id);
 				this.addSocket(socket);
@@ -147,6 +149,7 @@ class Client extends Channel {
 			});
 			
 		} else {
+			socket.close();
 			this._cb(new Error('Wrong server version.'));
 			this._cb = ()=>{};
 		}
@@ -155,7 +158,7 @@ class Client extends Channel {
 	
 	
 	getTime() {
-		return Date.now() & 0xFFFF;
+		return this._time;
 	}
 	
 	
@@ -171,6 +174,8 @@ class Client extends Channel {
 	// Actions that came from the network
 	emitActions(binary, socket) {
 		
+		
+		
 		this._readPacket(binary, socket).forEach(action => {
 			
 			if (action.type === '__SVC') {
@@ -184,6 +189,8 @@ class Client extends Channel {
 			}
 		});
 		
+		this._time = socket.time;
+		
 	}
 	
 	
@@ -191,23 +198,11 @@ class Client extends Channel {
 		
 		switch(data.e) {
 			
-			case 'join':
-				const joined = this.initUser(data.i);
-				this.addUser(joined);
-				this.emit('join', joined);
-				break;
-				
-			case 'drop':
-				const dropped = this._users[data.i];
-				this.remUser(dropped);
-				this.emit('drop', dropped);
-				break;
-				
 			case 'ping':
-			console.log('GOT PINGS',data);
+				// console.log('GOT PINGS',data.p);
 				
 				// Apply
-				this._time = data.t;
+				// this._time = data.t;
 				
 				const exist = {};
 				
@@ -226,7 +221,7 @@ class Client extends Channel {
 						this.emit('join', joined);
 					}
 					
-					exist[user.id] = true;
+					exist[p.i] = true;
 					
 				});
 				
@@ -244,7 +239,7 @@ class Client extends Channel {
 					type: '__SVC',
 					data: {
 						e: 'pong',
-						t: this._time,
+						t: data.t,
 					},
 				});
 				break;

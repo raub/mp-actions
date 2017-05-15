@@ -82,13 +82,17 @@ class Game extends EventEmitter {
 		this.dispatch({ type: 'REM_PLAYER', data: user });
 	}
 	
+	noPlayer(id) {
+		return ! this.state.players[id];
+	}
+	
 	// Action processor
 	dispatch(action) {
 		
 		switch(action.type) {
 			
 			case 'ADD_PLAYER':
-			console.log('ADDP', action);
+			// console.log('ADDP', action);
 				// TODO: make a class maybe? or even two...
 				const player = {
 					id: action.data.id,
@@ -127,7 +131,7 @@ class Game extends EventEmitter {
 				if (action.clid !== undefined) {
 					// Serverside: transmit to all other clients
 					// this.apply({ type: 'SV_CONTROL', data: { id: action.clid, control: action.data } });
-					console.log('SV GOT CTL FOR', action.clid, action.data);
+					// console.log('SV GOT CTL FOR', action.clid, action.data);
 					this.state.players[action.clid].control.fromArray(action.data);
 				} else {
 					// Clientside: apply immediately
@@ -143,11 +147,17 @@ class Game extends EventEmitter {
 				if (this.state.id === action.data.id) {
 					break;
 				}
+				if (this.noPlayer(action.data.id)) {
+					break;
+				}
 				this.state.players[action.data.id].control.fromArray(action.data.control);
 				break;
 				
 			case 'SV_X':
-			console.log('1',action.data, action.clid, this.state.players);
+				if (this.noPlayer(action.data.id)) {
+					break;
+				}
+			// console.log('1',action.data, action.clid, this.state.players);
 				this.state.players[action.data.id].x = action.data.x;
 				this.state.players[action.data.id].y = Math.sin(action.data.x);
 				break;
