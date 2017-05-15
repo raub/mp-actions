@@ -157,7 +157,7 @@ class Server extends Channel {
 	initSocket(tcp) {
 		
 		const socket = super.initSocket(tcp);
-		this._greet();
+		this._greet(socket);
 		
 	}
 	
