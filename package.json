@@ -1,5 +1,5 @@
 {
-  "name": "mpact",
+  "name": "node-mpact-raub",
   "version": "0.0.1",
   "description": "Multiplayer framework for Node.js",
   "main": "index.js",
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/raub/mpact"
+    "url": "https://github.com/raub/node-mpact"
   },
   "keywords": [
     "mpact",
