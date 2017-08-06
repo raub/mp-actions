@@ -186,7 +186,7 @@ class Channel extends EventEmitter {
 	 * Marks network entity as active, open
 	 * @arg {function} cb
 	 */
-	open(opts, cb) {
+	open(opts) {
 		
 		this._isOpen = true;
 		this._frameTimer = setInterval(this._sendFrame.bind(this), this._frameTime);
@@ -196,8 +196,14 @@ class Channel extends EventEmitter {
 			port: (opts.port || 27000) + 1,
 			exclusive: true,
 		};
-		this._udp.bind(udpAddress);
-		this._udp.on('listening', () => cb());
+		
+		return new Promise((res, rej) => {
+			
+			this._udp.on('listening', res);
+			this._udp.on('error', rej);
+			this._udp.bind(udpAddress);
+			
+		});
 		
 	}
 	
@@ -207,10 +213,13 @@ class Channel extends EventEmitter {
 	 * @arg {function} cb
 	 */
 	close(cb) {
+		
 		this._isOpen = false;
 		clearInterval(this._frameTimer);
 		this._frameTimer = null;
-		cb();
+		
+		return Promise.resolve();
+		
 	}
 	
 	

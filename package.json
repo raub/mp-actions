@@ -1,6 +1,6 @@
 {
   "name": "node-mpact-raub",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Multiplayer framework for Node.js",
   "main": "index.js",
   "scripts": {
@@ -19,8 +19,5 @@
     "server",
     "multiplayer"
   ],
-  "dependencies": {
-    "async": "2.1.5"
-  },
   "license": "MIT"
 }

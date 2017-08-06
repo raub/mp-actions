@@ -1,11 +1,10 @@
 'use strict';
 
-const async = require('async');
 const dgram = require('dgram');
 const net   = require('net');
 
-const Channel  = require('./lib/channel');
-const Binary = require('./lib/binary');
+const Channel = require('./lib/channel');
+const Binary  = require('./lib/binary');
 
 
 /**
@@ -97,6 +96,7 @@ class Server extends Channel {
 		
 	}
 	
+	
 	_execService(data, socket) {
 		switch(data.e) {
 			
@@ -110,6 +110,7 @@ class Server extends Channel {
 			
 		}
 	}
+	
 	
 	// Say hello upon client connection
 	_greet(socket) {
@@ -203,7 +204,7 @@ class Server extends Channel {
 	
 	
 	// Start listening to the network
-	open(opts, cb) {
+	open(opts) {
 		
 		this._address = {
 			host     : '0.0.0.0',
@@ -215,22 +216,23 @@ class Server extends Channel {
 		this._echoBuffer = new Buffer('mpact-bcast-pong-' + this._address.port);
 		this._pingString = `mpact-bcast-ping-${this._protocol.identity}`;
 		
-		async.parallel(
-			[
-				cb => this._server.listen(this._address, () => cb()),
-				cb => this._echo.bind({ host:'0.0.0.0', port: this._echoPort, exclusive: false }, cb),
-				cb => super.open(opts, cb),
-			],
-			err => {
-				if (err) {
-					cb(err);
-				}
-				
-				this._pingTimer = setInterval(this._sendPings.bind(this), 200);
-				
-				cb();
-			}
-		);
+		return Promise.all([
+			
+			new Promise((res, rej) => {
+				this._server.once('listening', res);
+				this._server.once('error', rej);
+				this._server.listen(this._address);
+			}),
+			
+			new Promise((res, rej) => {
+				this._echo.once('listening', res);
+				this._echo.once('error', rej);
+				this._echo.bind({ host:'0.0.0.0', port: this._echoPort, exclusive: false });
+			}),
+			
+			super.open(opts),
+			
+		]).then(() => this._pingTimer = setInterval(this._sendPings.bind(this), 200));
 		
 	}
 	
@@ -248,9 +250,9 @@ class Server extends Channel {
 	
 	
 	// Stop listenning to the network
-	close(cb) {
+	close() {
 		
-		super.close(cb);
+		return super.close();
 		
 	}
 	

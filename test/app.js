@@ -1,7 +1,5 @@
 'use strict';
 
-const async = require('async');
-
 const mpact = require('../.');
 const protocol = require('./protocol');
 const Game = require('./game');
@@ -15,61 +13,48 @@ const subscribe = (mpact, game) => {
 	mpact.on( 'drop'  , game.drop.bind(game)       );
 };
 
-const createServer = (cb) => {
+const createServer = () => {
 	
 	const server = new mpact.Server(protocol);
 	
-	server.open({port: 27999}, () => {
+	return server.open({port: 27999}).then(() => {
 		
 		console.log('SERVER ONLINE.');
 		
 		const game = new Game();
 		subscribe(server, game);
 		
-		cb();
-		
 	});
 	
 };
 
-const joinServer = (cb) => {
+const joinServer = () => {
 	
 	const client = new mpact.Client(protocol);
 	
-	client.localServers((err, list) => {
+	return client.localServers().then(list => {
 		
 		if (list.length < 1) {
-			console.log('NO SERVERS FOUND!');
-			cb();
+			return console.log('NO SERVERS FOUND!');
 		}
 		
-		client.open({ remote: list[0] }, () => {
-			
-			console.log(`CLIENT#${client.id} ONLINE.`);
-			
-			const game = new Game({ id: client.id });
-			subscribe(client, game);
-			
-			cb();
-			
-		});
+		return client.open({ remote: list[0] });
+		
+	}).then(() => {
+		
+		console.log(`CLIENT#${client.id} ONLINE.`);
+		
+		const game = new Game({ id: client.id });
+		subscribe(client, game);
 		
 	});
 	
 }
 
-async.series(
-	
-	[
-		cb => createServer(cb),
-		cb => joinServer(cb),
-		cb => joinServer(cb),
-		cb => joinServer(cb),
-	],
-	
-	err => {
-		console.log('DONE.', err);
-	}
-	
-);
+createServer()
+	.then(joinServer)
+	.then(joinServer)
+	.then(joinServer)
+	.then(() => console.log('DONE.'))
+	.catch(err => console.log('Error:', err))
 

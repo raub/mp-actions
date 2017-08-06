@@ -17,12 +17,12 @@ class Client extends Channel {
 	
 	get id() { return this._id; }
 	
+	
 	constructor(protocol) {
 		
 		super(protocol);
 		
 		this._id = null;
-		this._cb = ()=>{};
 		
 		this._client = null;
 		this._remote = null;
@@ -85,32 +85,35 @@ class Client extends Channel {
 		
 	}
 	
-	open(opts, cb) {
+	
+	open(opts) {
 		
 		if ( ! opts.remote ) {
-			return;
+			return Promise.reject(new Error('Remote not set.'));
 		}
 		
 		this._stopEcho();
 		
-		this._cb = cb;
-		
 		this._remote = opts.remote;
 		
-		this._client = net.createConnection(this._remote, () => {
+		return new Promise((res, rej) => {
+			
+			this.once('connect', res);
+			this.once('error', rej);
+			
+			this._client = net.createConnection(this._remote);
+			this._client.once('error', err => this.emit('error', err));
+			
+			this._client.once('connect', () => {
 				
 				this._port = this._client.address().port;
 				this.initSocket(this._client);
 				
-				super.open(Object.assign({}, opts, { port: this._port }), err => {
-					if (err) {
-						this._cb(err);
-						this._cb = ()=>{};
-					}
-				});
+				super.open(Object.assign({}, opts, { port: this._port })).then(res);
 				
-			}
-		);
+			});
+			
+		});
 		
 	}
 	
@@ -143,15 +146,13 @@ class Client extends Channel {
 				// console.log('CLIENT GOT ID:', socket.id);
 				this.addSocket(socket);
 				
-				this._cb();
-				this._cb = ()=>{};
+				this.emit('connect');
 				
 			});
 			
 		} else {
 			socket.close();
-			this._cb(new Error('Wrong server version.'));
-			this._cb = ()=>{};
+			this.emit('error', new Error('Wrong server version.'));
 		}
 		
 	}
@@ -162,19 +163,19 @@ class Client extends Channel {
 	}
 	
 	
-	close(cb) {
-		this._cb = ()=>{};
+	close() {
+		
 		this._remote = null;
 		this._client = null;
 		this._port   = null;
-		super.close(cb);
+		
+		return super.close();
+		
 	}
 	
 	
 	// Actions that came from the network
 	emitActions(binary, socket) {
-		
-		
 		
 		this._readPacket(binary, socket).forEach(action => {
 			
@@ -265,7 +266,7 @@ class Client extends Channel {
 	_stopEcho() {
 		
 		if (this._echoActive === false) {
-			return;
+			return this.emit('echoList', []);
 		}
 		
 		this._echoActive = false;
@@ -277,8 +278,7 @@ class Client extends Channel {
 		clearInterval(this._echoTimeoutTimer);
 		this._echoTimeoutTimer = null;
 		
-		this._echoCb(null, this._echoServers);
-		this._echoCb = ()=>{};
+		this.emit('echoList', this._echoServers);
 		
 	}
 	
@@ -288,19 +288,19 @@ class Client extends Channel {
 		}
 	}
 	
-	localServers(cb) {
+	localServers() {
 		
-		this._echoCb = cb;
 		this._echoServers = [];
 		this._echoActive = true;
 		this._echoPrev = Date.now();
 		
-		// console.log('CL SEND ECHO:', this._echoBuffer.toString());
-		this._echo.send(this._echoBuffer, 0, this._echoBuffer.length, this._echoPort, '255.255.255.255');
-		
 		this._echoTotalTimer = setTimeout(this._stopEcho.bind(this), this._echoTotal);
 		this._echoTimeoutTimer = setInterval(this._checkEcho.bind(this), this._echoTimeout);
 		
+		return new Promise(res => {
+			this.once('echoList', res);
+			this._echo.send(this._echoBuffer, 0, this._echoBuffer.length, this._echoPort, '255.255.255.255');
+		});
 		
 	}
 	
