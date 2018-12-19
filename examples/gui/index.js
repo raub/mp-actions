@@ -1,7 +1,7 @@
 'use strict';
 
 const mpact = require('../.');
-const protocol = require('./protocol');
+const protocol = require('../protocol');
 const Game = require('./game');
 
 
@@ -21,7 +21,7 @@ const createServer = () => {
 		
 		console.log('SERVER ONLINE.');
 		
-		const game = new Game();
+		const game = new Game({ headless: true });
 		subscribe(server, game);
 		
 	});
@@ -52,8 +52,6 @@ const joinServer = () => {
 }
 
 createServer()
-	.then(joinServer)
-	.then(joinServer)
 	.then(joinServer)
 	.then(() => console.log('DONE.'))
 	.catch(err => console.log('Error:', err))
