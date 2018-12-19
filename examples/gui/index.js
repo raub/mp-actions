@@ -1,6 +1,6 @@
 'use strict';
 
-const mpact = require('../.');
+const mpact = require('node-mpact');
 const protocol = require('../protocol');
 const Game = require('./game');
 
@@ -13,46 +13,53 @@ const subscribe = (mpact, game) => {
 	mpact.on( 'drop'  , game.drop.bind(game)       );
 };
 
-const createServer = () => {
+
+const createServer = async (opts) => {
 	
 	const server = new mpact.Server(protocol);
 	
-	return server.open({port: 27999}).then(() => {
-		
-		console.log('SERVER ONLINE.');
-		
-		const game = new Game({ headless: true });
-		subscribe(server, game);
-		
-	});
+	await server.open({port: 27999});
+	
+	console.log('SERVER ONLINE.');
+	
+	const game = new Game(opts);
+	subscribe(server, game);
 	
 };
 
-const joinServer = () => {
+const joinServer = async (opts) => {
 	
 	const client = new mpact.Client(protocol);
 	
-	return client.localServers().then(list => {
-		
-		if (list.length < 1) {
-			return console.log('NO SERVERS FOUND!');
-		}
-		
-		return client.open({ remote: list[0] });
-		
-	}).then(() => {
-		
-		console.log(`CLIENT#${client.id} ONLINE.`);
-		
-		const game = new Game({ id: client.id });
-		subscribe(client, game);
-		
-	});
+	const list = await client.localServers();
+	
+	if (list.length < 1) {
+		console.log('NO SERVERS FOUND!');
+		return;
+	}
+	
+	await client.open({ remote: list[0] });
+	
+	console.log(`CLIENT#${client.id} ONLINE.`);
+	
+	const game = new Game({ id: client.id, ...opts });
+	subscribe(client, game);
 	
 }
 
-createServer()
-	.then(joinServer)
-	.then(() => console.log('DONE.'))
-	.catch(err => console.log('Error:', err))
 
+(async () => {
+	try {
+		
+		await createServer({ headless: true });
+		
+		await joinServer();
+		await joinServer({ headless: true });
+		await joinServer({ headless: true });
+		
+		console.log('DONE.');
+		
+	} catch (e) {
+		console.log('Error:', e)
+	}
+})();

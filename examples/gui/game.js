@@ -111,6 +111,11 @@ class Game extends EventEmitter {
 					control : new Control(),
 				};
 				
+				if ( ! this._headless ) {
+					const { Rect }  = require('../index');
+					player.rect = new Rect({ screen: this.screen });
+				}
+				
 				this.state.players[action.data.id] = player;
 				this.state.plist.push(player);
 				
