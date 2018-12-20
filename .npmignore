@@ -6,11 +6,11 @@
 .lock-wscript
 .project
 binary/
+bin-*/
 build*/
 CPPLINT.cfg
 Debug/
 examples/
+node_modules/
 package-lock.json
 test/
-qt/
-*.qmlc

@@ -1,6 +1,6 @@
 'use strict';
 
-const mpact = require('node-mpact');
+const mpact = require('mpact-raub');
 const protocol = require('../protocol');
 const Game = require('./game');
 

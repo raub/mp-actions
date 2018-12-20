@@ -1,5 +1,5 @@
 {
-  "name": "node-mpact-raub",
+  "name": "mpact-raub",
   "version": "0.0.2",
   "description": "Multiplayer framework for Node.js",
   "main": "index.js",
