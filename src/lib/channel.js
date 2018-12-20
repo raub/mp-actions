@@ -186,7 +186,7 @@ class Channel extends EventEmitter {
 	 * Marks network entity as active, open
 	 * @arg {function} cb
 	 */
-	open(opts) {
+	async open(opts) {
 		
 		this._isOpen = true;
 		this._frameTimer = setInterval(this._sendFrame.bind(this), this._frameTime);

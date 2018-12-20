@@ -43,6 +43,7 @@ class Game extends EventEmitter {
 		
 		this._headless = opts.headless;
 		if ( ! this._headless ) {
+			console.log('game.js', '---------- NOT HEADLESS');
 			const { Screen }  = require('3d-core-raub');
 			this.screen = new Screen();
 		}
@@ -59,12 +60,17 @@ class Game extends EventEmitter {
 		// Then update (predict) everybody
 		this.state.plist.forEach(player => {
 			const vx = dt * ( (player.control.right?1:0) - (player.control.left?1:0) );
+			// console.log('game.js', 'xx', player.x, vx);
 			this.apply({ type: 'SV_X', data: { x: player.x + vx, id: player.id } });
 			this.apply({ type: 'SV_CONTROL', data: { id: player.id, control: player.control.toArray() } });
+			if ( ! this._headless ) {
+				player.rect.pos = [player.x, 0];
+			}
 		});
 		
 		if ( ! this._headless ) {
-			this.screen.draw();
+			const { doc }  = require('3d-core-raub');
+			doc.requestAnimationFrame(() => this.screen.draw());
 		}
 		
 	}
@@ -112,13 +118,20 @@ class Game extends EventEmitter {
 				};
 				
 				if ( ! this._headless ) {
-					const { Rect }  = require('../index');
+					const { Rect }  = require('3d-core-raub');
+					console.log('game.js', 'RECT', this.state.id, player.id);
 					player.rect = new Rect({ screen: this.screen });
+					player.rect.mat.color = [
+						Math.random(),
+						Math.random(),
+						Math.random(),
+					];
+					player.rect.size = [100, 100];
 				}
 				
 				this.state.players[action.data.id] = player;
 				this.state.plist.push(player);
-				
+				// console.log('game.js', 'PLAYOR', this.state.id, player.id);
 				if (this.state.id === player.id) {
 					this._updatePlayer = function () {
 						player.control.fetch();
@@ -133,7 +146,7 @@ class Game extends EventEmitter {
 				
 			case 'REM_PLAYER':
 				delete this.state.players[action.data.id];
-				this.state.plist = this.state.playerlist.filter(p => p.id !== action.data.id);
+				this.state.plist = this.state.plist.filter(p => p.id !== action.data.id);
 				if (this.state.id === action.data.id) {
 					this._updatePlayer = ()=>{};
 				}

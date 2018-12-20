@@ -86,10 +86,10 @@ class Client extends Channel {
 	}
 	
 	
-	open(opts) {
+	async open(opts) {
 		
 		if ( ! opts.remote ) {
-			return Promise.reject(new Error('Remote not set.'));
+			return new Error('Remote not set.');
 		}
 		
 		this._stopEcho();
@@ -109,7 +109,7 @@ class Client extends Channel {
 				this._port = this._client.address().port;
 				this.initSocket(this._client);
 				
-				super.open(Object.assign({}, opts, { port: this._port })).then(res);
+				super.open({ ...opts, port: this._port });
 				
 			});
 			
@@ -145,7 +145,7 @@ class Client extends Channel {
 				
 				// console.log('CLIENT GOT ID:', socket.id);
 				this.addSocket(socket);
-				
+				console.log('client.js', 'EMICON CL,', this._id);
 				this.emit('connect');
 				
 			});
