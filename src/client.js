@@ -215,7 +215,7 @@ class Client extends Channel {
 						// If user exists, then set his ping
 						user.ping = p.p;
 					} else {
-						console.log('NEW USER', p);
+						console.log('NEW USER IN PING', p);
 						// Else create a new one
 						const joined = this.initUser(p.i);
 						this.addUser(joined);

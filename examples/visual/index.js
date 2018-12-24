@@ -55,7 +55,7 @@ const joinServer = async (opts) => {
 		
 		await joinServer();
 		await joinServer({ headless: true });
-		await joinServer({ headless: true });
+		// await joinServer({ headless: true });
 		
 		console.log('DONE.');
 		

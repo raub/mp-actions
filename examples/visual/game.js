@@ -85,7 +85,7 @@ class Game extends EventEmitter {
 	
 	// For join event
 	join(user) {
-		console.log('JOINED:', user);
+		console.log('JOINED:', user, '@', this.state.id);
 		this.dispatch({ type: 'ADD_PLAYER', data: user });
 	}
 	
